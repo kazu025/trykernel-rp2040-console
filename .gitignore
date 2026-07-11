@@ -1,0 +1,13 @@
+# Build outputs
+build/
+*.o
+*.elf
+*.bin
+*.uf2
+*.map
+*.lst
+*.d
+
+#VScode local settings
+.vscode/
+

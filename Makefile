@@ -1,0 +1,131 @@
+# ===================================================================================
+# Pico RTOS system v00
+# original source TryKernel - Interface 2023/07 Part4Chap3
+# Build for Raspberry Pi Pico / RP2040 / Cortex-M0+
+# ===================================================================================
+TARGET	:= tkv
+BUILD   := build
+
+PREFIX  := arm-none-eabi-
+CC      := $(PREFIX)gcc
+OBJCOPY := $(PREFIX)objcopy
+OBJDUMP := $(PREFIX)objdump
+SIZE    := $(PREFIX)size
+
+CPUFLAGS := -mcpu=cortex-m0plus -mthumb
+
+INCLUDES := \
+			-Iinclude \
+			-Iuser \
+			-Idrivers
+
+CFLAGS  := \
+			$(CPUFLAGS) -O0 -g3 -Wall -Wextra \
+			-ffreestanding -fno-builtin -ffunction-sections \
+			-fdata-sections -MMD -MP $(INCLUDES)
+
+ASFLAGS  := \
+			$(CPUFLAGS) -O0 -g3 \
+			-x assembler-with-cpp \
+			-MMD \
+			-MP \
+			$(INCLUDES)
+
+LDSCRIPT := linker/pico_memmap.ld
+
+LDFLAGS := \
+			$(CPUFLAGS) \
+			-T$(LDSCRIPT) \
+			-nostdlib \
+			-nostartfiles \
+			-Wl,--gc-sections \
+			-Wl,-Map=$(BUILD)/$(TARGET).map
+
+C_SRCS  := \
+	boot/boot2.c \
+	boot/reset_hdr.c \
+	boot/vector_tbl.c \
+	kernel/context.c \
+	kernel/eventflag.c \
+	kernel/inittsk.c \
+	kernel/scheduler.c \
+	kernel/systimer.c \
+	kernel/semaphore.c \
+	kernel/task_mange.c \
+	kernel/task_queue.c \
+	kernel/task_sync.c \
+	drivers/gpio.c \
+	drivers/uart.c \
+	user/task_led.c	\
+	user/task_uartrx.c \
+	user/usermain.c \
+	user/command.c \
+	user/console.c
+
+#	kernel/syslib.c \
+
+S_SRCS := \
+	kernel/dispatch.S
+
+OBJS := \
+	$(addprefix $(BUILD)/, $(C_SRCS:.c=.o)) \
+	$(addprefix $(BUILD)/, $(S_SRCS:.S=.o))
+
+DEPS := $(OBJS:.o=.d)
+
+ELF := $(BUILD)/$(TARGET).elf
+BIN := $(BUILD)/$(TARGET).bin
+HEX := $(BUILD)/$(TARGET).hex
+LST := $(BUILD)/$(TARGET).lst
+
+.PHONY: all clean size disam flash
+
+all: $(ELF) $(BIN) $(HEX) size
+
+$(ELF): $(OBJS)
+	$(CC) $(LDFLAGS) $^ -lgcc -o $@
+	$(OBJDUMP) -h -S $@ > $(LST)
+
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/%.o: %.S
+	@mkdir -p $(dir $@)
+	$(CC) $(ASFLAGS) -c $< -o $@
+
+$(BIN): $(ELF)
+	$(OBJCOPY) -O binary $< $@
+
+$(HEX): $(ELF)
+	$(OBJCOPY) -O ihex $< $@
+
+size: $(ELF)
+	$(SIZE) $<
+
+disasm: $(ELF)
+	$(OBJDUMP) -d -S $< | less
+
+flash: $(ELF)
+	openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+		-c "adapter speed 1000" \
+		-c "program $(ELF) verify reset exit"
+
+flash-halt: $(ELF)
+	openocd -f innterface/cmsis-dap.cfg -f target/rp2040.cfg \
+		-c "adapter speed 1000" \
+		-c "program $(ELF) verify" \
+		-c "reset halt"
+		-c "halt"
+
+halt:
+	openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
+		-c "adapter speed 1000" \
+		-c "init" \
+		-c "halt" \
+		-c "exit"
+
+clean:
+	rm -rf $(BUILD)
+
+-include $(DEPS)
