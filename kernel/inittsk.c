@@ -1,4 +1,4 @@
-﻿/* 
+﻿/*
  *** Try Kernel
  *      初期タスク
 */
@@ -23,7 +23,7 @@ void initsk(INT stacd, void *exinf)
     (void)stacd;
     (void)exinf;
     uart_init();                                  // シリアル通信の初期化
-    uart_puts("Strat Try Kernel\r\n");
+    uart_puts("Start Try Kernel\r\n");
 
     usermain();
     tk_ext_tsk();

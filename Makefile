@@ -60,7 +60,12 @@ C_SRCS  := \
 	user/task_uartrx.c \
 	user/usermain.c \
 	user/command.c \
-	user/console.c
+	user/task_uartlog.c \
+	user/console.c	\
+	user/uart_sync.c \
+	user/task_uarttx.c \
+	user/uart_tx.c	\
+	user/mini_printf.c
 
 #	kernel/syslib.c \
 
@@ -78,7 +83,7 @@ BIN := $(BUILD)/$(TARGET).bin
 HEX := $(BUILD)/$(TARGET).hex
 LST := $(BUILD)/$(TARGET).lst
 
-.PHONY: all clean size disam flash
+.PHONY: all clean size disasm flash flash-halt halt
 
 all: $(ELF) $(BIN) $(HEX) size
 
@@ -112,11 +117,12 @@ flash: $(ELF)
 		-c "program $(ELF) verify reset exit"
 
 flash-halt: $(ELF)
-	openocd -f innterface/cmsis-dap.cfg -f target/rp2040.cfg \
+	openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
 		-c "adapter speed 1000" \
 		-c "program $(ELF) verify" \
-		-c "reset halt"
-		-c "halt"
+		-c "reset halt" \
+		-c "halt" \
+		-c "exit"
 
 halt:
 	openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \

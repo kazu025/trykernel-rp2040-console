@@ -17,5 +17,5 @@ int uart_rx_getc(UB *data);     // リングバッファから１文字取り出
 void uart_rx_poll(void);            // ポーリングでリングバッファに格納
 void uart_rxbuf_init(void);         // 受信バッファの初期化
 UW uart_rx_overflow_count(void);    // 受信バッファのオーバーフロー回数を返す
-
+UW uart_rx_hw_overrun_count(void);  // オーバーランカウントを返す
 #endif /* UART_H */

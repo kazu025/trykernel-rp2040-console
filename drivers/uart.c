@@ -18,6 +18,7 @@
 static volatile UW uart_rx_head = 0;
 static volatile UW uart_rx_tail = 0;
 static volatile UW uart_rx_overflow = 0;
+static volatile UW uart_rx_hw_overrun;
 static UB uart_rx_buf[UART_RX_BUF_SIZE];
 
 /* ---------------------------------------------------------- */
@@ -39,6 +40,7 @@ void uart_rxbuf_init(void){
     uart_rx_head = 0;
     uart_rx_tail = 0;
     uart_rx_overflow = 0;
+    uart_rx_hw_overrun = 0;
 }
 /*
  * 送信FiFo Full
@@ -64,16 +66,18 @@ void uart_putc(UB c){
  */
 UINT uart_puts(const char *s){
     UINT count = 0;
-    while(*s){
+    if(s == NULL) return 0;
+    while(*s != '\0'){
         uart_putc((UB)(*s++));
         count++;
     }
     return count;
 }
 /*
- * 文字列受信：Noneブロッキング
+ * 文字列受信：Non-ブロッキング
  */
 BOOL uart_getc_nonblock(UB *c){
+    if(c == NULL) return FALSE;
     if(uart_can_recv()){
         *c = (UB)(in_w(UART0_BASE + UARTx_DR) & 0xFFU);
         return TRUE;
@@ -94,11 +98,14 @@ UB uart_getc(void){
 UW uart_rx_overflow_count(void){
     return uart_rx_overflow;
 }
-
+UW uart_rx_hw_overrun_count(void){
+    return uart_rx_hw_overrun;
+}
 /*
  * 受信バッファから１文字取り出す
 */
 int uart_rx_getc(UB *data){
+    if(data == NULL) return 0;
     if(uart_rx_head == uart_rx_tail){
         return 0; // buffer empty
     }
@@ -111,6 +118,14 @@ int uart_rx_getc(UB *data){
  */
 void uart_rx_poll(void){
     UB data;
+    UW status;
+
+    status = in_w(UART0_BASE + UARTx_RSR_ECR);
+    if((status & UART_RSR_OE) != 0){
+        uart_rx_hw_overrun++;
+        /* エラー状態をクリア */
+        out_w(UART0_BASE + UARTx_RSR_ECR, 0U);
+    }
     while(uart_can_recv()){
         data = (UB)(in_w(UART0_BASE + UARTx_DR) & 0xFFU);
         uart_rxbuf_put(data);

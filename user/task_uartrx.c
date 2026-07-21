@@ -1,7 +1,7 @@
 #include <trykernel.h>
 #include "uart.h"
 #include "console.h"
-
+#include "uart_tx.h"
 void task_uartrx(INT stacd, void *exinf)
 {
     UB c;
@@ -9,7 +9,7 @@ void task_uartrx(INT stacd, void *exinf)
 
     uart_rxbuf_init();
     console_init();
-    uart_puts("\r\nuart rx task start\r\n");
+    uart_tx_send("\r\nuart rx task start\r\n");
     console_prompt();
 
     while (1) {

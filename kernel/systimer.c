@@ -1,4 +1,4 @@
-﻿/* 
+﻿/*
  *** Try Kernel
  *      システムタイマ
 */
@@ -30,7 +30,7 @@ void systimer_handler(void)
 
             tcb->state      = TS_READY;
             tcb->waifct     = TWFCT_NON;
-            tqueue_add_entry( &ready_queue[tcb->itskpri], tcb); // タスクをレディキューにつなぐ
+            tqueue_add_entry( &ready_queue[PRI_INDEX(tcb->itskpri)], tcb); // タスクをレディキューにつなぐ
         }
     }
     scheduler();        // スケジューラを実行する

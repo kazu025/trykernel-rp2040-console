@@ -1,8 +1,8 @@
 ﻿#ifndef APIDEF_H
 #define APIDEF_H
-/* 
+/*
  *** Try Kernel
- *      API定義 
+ *      API定義
 */
 
 /* タイムアウト時間 */
@@ -23,6 +23,7 @@ typedef struct {
     SZ      stksz;	    // スタックサイズ
     void    *bufptr;    // スタックのバッファポインタ
 } T_CTSK;
+#define PRI_INDEX(pri) ((UINT)(pri) - 1)
 
 /* タスク属性 */
 #define TA_HLNG         0x0000001           // タスクが高級言語で記述
@@ -33,7 +34,7 @@ typedef struct {
 #define TA_RNG3         0x0000300           // 保護レベル3
 
 /* タスクの待ち属性 */
-#define TA_TFIFO        0x00000000          // 待ちタスクをFIFO順で管理
+// #define TA_TFIFO        0x00000000          // 待ちタスクをFIFO順で管理
 #define TA_TPRI         0x00000001          // 待ちタスクを優先度順で管理
 #define TA_FIRST        0x00000000          // 待ち行列先頭のタスクを優先
 #define TA_CNT          0x00000002          // 要求数の少ないタスクを優先

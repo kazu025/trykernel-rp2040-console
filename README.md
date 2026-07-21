@@ -1,274 +1,283 @@
-# TryKernel UART Console for RP2040
+# TryKernel for Raspberry Pi Pico
 
-RP2040 / Raspberry Pi Pico 上で動作する TryKernel 学習用プロジェクトです。
+Raspberry Pi Pico（RP2040）上で動作する、学習用の小規模RTOSプロジェクトです。
 
-現在は、TryKernel 上で以下の機能を実装しています。
+CQ出版社『Interface』2023年7月号の特集「ラズパイPicoで1500行 ゼロから作るOS」に掲載されたシングルコア版 **Try Kernel** を基に、GPIOドライバ、UARTコンソール、UART送受信バッファ、タスク間同期などを追加しています。
 
-* LED制御タスク
-* UART受信タスク
-* UART受信リングバッファ
-* 1行入力コンソール
-* コマンドテーブル方式のコマンド処理
-* UARTコンソールからのLED制御
+Pico SDKは使用せず、RP2040のレジスタを直接操作しています。RTOSのスケジューリング、コンテキスト切り替え、待ち行列、セマフォ、イベントフラグなどの仕組みを、実際に動かしながら理解することを目的としています。
 
-今後、I2Cセンサーなどを追加しやすくするため、UARTドライバ、コンソール処理、コマンド処理、タスク処理を分離した構成にしています。
+> [!NOTE]
+> 本プロジェクトはOSとマイコンの学習用です。製品への組み込みを目的としたものではありません。
 
----
+## 主な機能
 
-## Based on
+### TryKernel
 
-This project is based on **Try Kernel** introduced in CQ Publishing **Interface 2023年7月号** 特集「ラズパイPicoで1500行 ゼロから作るOS」.
+- Cortex-M0+向けシングルコアRTOS
+- 優先度ベースのプリエンプティブ・スケジューリング
+- タスク生成・起動・終了
+- タスク遅延・起床待ち・起床
+- セマフォによる排他制御
+- イベントフラグによるタスク同期
+- SysTickによる10 ms周期の時間管理
+- 最大32タスク、優先度1～16
+- 最大8セマフォ、最大8イベントフラグ
 
-Try Kernel 本体、および Interface 2023年7月号の配布プログラムに由来するコードについては、元の Try Kernel / Interface 配布プログラムのライセンスに従います。
+### 追加した周辺機能
 
-本リポジトリでは、Try Kernel を学習用に使用し、UARTコンソール、コマンドテーブル、タスク構成整理などを追加・変更しています。
+- GPIO25のオンボードLED制御
+- UART0のレジスタレベル・ドライバ
+- UART受信ポーリングと128バイトのリングバッファ
+- UART受信のソフトウェア・オーバーフロー検出
+- UART RX FIFOのハードウェア・オーバーラン検出
+- 1行入力方式のUARTコンソール
+- コマンドテーブル方式のコマンド処理
+- 固定長UART送信キュー
+- UART送信専用タスク
+- セマフォによる送信キューの保護
+- イベントフラグによる送信タスクの起床
+- 軽量な`mini_printf()`
 
----
+## UARTの構成
 
-## Target
-
-* Board: Raspberry Pi Pico / RP2040
-* Base: CQ Publishing Interface 2023年7月号 Try Kernel
-* Kernel: TryKernel
-* Language: C
-* UART: UART0
-* LED: Pico onboard LED GPIO25
-
----
-
-## Current Features
-
-### UART Console
-
-UART経由で簡易コンソールを操作できます。
-
-UART受信タスクは、UARTのRX FIFOをポーリングし、受信データをソフトウェアリングバッファへ格納します。
-その後、リングバッファから1文字ずつ取り出し、コンソール入力処理へ渡します。
-
-処理の流れは以下です。
-
-```text
-UART RX FIFO
-    ↓
-UART software ring buffer
-    ↓
-console_input_char()
-    ↓
-line buffer
-    ↓
-command dispatcher
+```mermaid
+flowchart TD
+    RXF["UART0 RX FIFO"] --> POLL["UART受信タスク<br/>ポーリング"]
+    POLL --> RXB["128バイト<br/>RXリングバッファ"]
+    RXB --> CON["コンソール<br/>コマンドテーブル"]
+    CON --> LED["LED制御"]
+    CON --> TXQ["固定長TXキュー<br/>16件 × 128バイト"]
+    APP["LED・ログタスク"] --> TXQ
+    TXQ -->|イベントフラグ| TXT["UART送信タスク"]
+    TXT --> TXF["UART0 TX FIFO"]
 ```
 
----
+通常の文字列出力では、`uart_tx_send()`または`uart_tx_printf()`を使います。送信要求はキューへ登録され、イベントフラグで起床したUART送信タスクが実際の送信を行います。
 
-### Command Table
+送信キューはセマフォで保護しています。また、コンソールの入力エコーなど、UARTへ直接出力する処理と送信タスクが競合しないように、実際のUART出力も別のセマフォで排他制御しています。
 
-コマンド処理は、コマンドテーブル方式で実装しています。
+## UART設定と接続
 
-現在対応しているコマンドは以下です。
+| 項目 | 設定 |
+|---|---|
+| UART | UART0 |
+| ボーレート | 115200 bps |
+| データ形式 | 8N1 |
+| フロー制御 | なし |
+| TX | GPIO0 |
+| RX | GPIO1 |
+| LED | GPIO25 |
 
-| Command     | Description                 |
-| ----------- | --------------------------- |
-| `help`      | コマンド一覧を表示                   |
-| `status`    | TryKernelの簡易ステータスとLEDモードを表示 |
-| `echo`      | 入力文字列をそのまま表示                |
-| `led on`    | LEDを点灯                      |
-| `led off`   | LEDを消灯                      |
-| `led blink` | LEDを点滅                      |
+USB-UART変換器またはRaspberry Pi Debug ProbeのUART端子を使用する場合は、次のように接続します。
 
-実行例:
+| Raspberry Pi Pico | USB-UART側 |
+|---|---|
+| GPIO0（TX） | RX |
+| GPIO1（RX） | TX |
+| GND | GND |
 
-```text
-> help
-commands:
-   help - show command list
-   status - show system status
-   echo - echo arguments
-   led - led on/off/blink
+信号レベルは3.3 V TTLを使用してください。
 
-> status
-TryKernel status: running
-LED mode: OFF
+## 必要な環境
 
-> echo hello
-hello
+Linux MintまたはUbuntu系Linuxを想定しています。
 
-> led on
-led on
+- Raspberry Pi Pico
+- Raspberry Pi Debug ProbeなどのCMSIS-DAP対応デバッガ
+- GNU Arm Embedded Toolchain
+- GNU Make
+- OpenOCD
+- minicomなどのシリアル端末
 
-> led off
-led off
-
-> led blink
-led blink
-```
-
----
-
-## Task Structure
-
-現在の主なタスク構成は以下です。
-
-```text
-usermain()
-  ├─ task_led1
-  │    └─ LED mode に応じて GPIO25 を制御
-  │
-  └─ task_uartrx
-       ├─ UART RX FIFO をポーリング
-       ├─ UARTリングバッファへ格納
-       └─ console_input_char() へ入力文字を渡す
-```
-
----
-
-## Source Structure
-
-主なファイルの役割は以下です。
-
-```text
-gpio.c / gpio.h
-  RP2040 GPIO制御
-  Pico onboard LED GPIO25 制御
-
-uart.c / uart.h
-  UART0 初期化
-  UART送信
-  UART受信
-  UART受信リングバッファ
-
-console.c / console.h
-  1行入力バッファ
-  Enter / Backspace 処理
-  エコーバック
-  プロンプト表示
-
-command.c / command.h
-  コマンドテーブル
-  コマンド分解
-  help/status/echo/led コマンド
-
-task_led.c / task_led.h
-  LED制御タスク
-  LEDモード管理
-
-task_uartrx.c
-  UART受信タスク
-
-usermain.c
-  タスク生成と起動
-```
-
----
-
-## Design Policy
-
-このプロジェクトでは、以下の方針で構成を整理しています。
-
-### 1. UARTドライバはコマンド処理を知らない
-
-`uart.c` は、UARTの送受信と受信リングバッファに集中します。
-コンソール入力やコマンド処理は `console.c` / `command.c` に分離します。
-
-### 2. UART受信タスクは1文字入力を渡すだけにする
-
-`task_uartrx.c` は、UART受信とコンソールへの入力受け渡しだけを担当します。
-コマンドの内容は知りません。
-
-### 3. console.c は1行入力を作る
-
-`console.c` は、1文字ずつ受け取った入力を行バッファに蓄積し、Enter入力でコマンド処理へ渡します。
-
-### 4. command.c はコマンドテーブルで処理する
-
-`command.c` は、入力された1行を引数に分解し、コマンドテーブルを検索して対応する関数を実行します。
-
-### 5. センサー追加を見据えた構成にする
-
-今後、センサータスクを追加する場合は、以下のような構成にする予定です。
-
-```text
-task_sensor.c
-  センサーを周期的に取得
-
-sensor_manager.c
-  最新のセンサー値を保持
-
-command.c
-  sensor コマンドで最新値を表示
-```
-
----
-
-## Build
-
-プロジェクトのMakefileがあるディレクトリでビルドします。
+Ubuntu／Linux Mintでは、必要なツールを次のようにインストールできます。
 
 ```bash
+sudo apt update
+sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi make openocd minicom
+```
+
+## ビルド
+
+リポジトリのルート・ディレクトリで実行します。
+
+```bash
+make clean
 make
 ```
 
-生成物は `.gitignore` により Git 管理対象外にすることを推奨します。
+ビルドに成功すると、`build/`以下に次のファイルが生成されます。
 
-例:
+| ファイル | 内容 |
+|---|---|
+| `tkv.elf` | デバッグ情報付き実行ファイル |
+| `tkv.bin` | バイナリ形式 |
+| `tkv.hex` | Intel HEX形式 |
+| `tkv.lst` | ソース混在の逆アセンブル・リスト |
+| `tkv.map` | リンカ・マップ |
 
-```gitignore
-build/
-*.o
-*.elf
-*.bin
-*.uf2
-*.map
-*.lst
-*.d
-.vscode/
-```
+このプロジェクトは`-nostdlib`、`-nostartfiles`を使用するフリースタンディング環境です。`uart_tx_init()`では構造体の各メンバを明示的に代入し、コンパイラが意図せず`memset()`への依存を生成してリンクエラーになる問題を回避しています。
 
----
+## 書き込み
 
-## Serial Console
-
-UART接続後、シリアルターミナルから操作します。
-
-例:
+PicoのSWD端子とCMSIS-DAP対応デバッガを接続して、次を実行します。
 
 ```bash
-minicom
+make flash
 ```
 
-または、環境に応じて `screen` などを使用します。
+書き込み後に停止させる場合は、次を使用します。
 
 ```bash
-screen /dev/ttyACM0 115200
+make flash-halt
 ```
 
-シリアルデバイス名は環境によって異なります。
+OpenOCDから単にCPUを停止する場合は、次を使用します。
 
----
+```bash
+make halt
+```
 
-## License
+## UARTコンソール
 
-This repository is released under the MIT License for the original code added or modified in this repository.
+例として、UARTが`/dev/ttyACM0`として認識された場合は次のように接続します。
 
-This project is based on Try Kernel, which was created for CQ Publishing Interface magazine, July 2023 issue, feature article "ゼロから作るOS".
+```bash
+minicom -D /dev/ttyACM0 -b 115200
+```
 
-Try Kernel and the source code derived from the original Interface 2023年7月号 sample program are subject to the original Try Kernel license.
+端末側は115200 bps、8N1、フロー制御なしに設定します。現在のコンソールはCRをEnterとして処理するため、端末の改行送信もCRに設定してください。
 
-Please also refer to the original Try Kernel / Interface Try Kernel license files.
+### コマンド一覧
 
-Note: Some boot code in the original Try Kernel distribution may include code or object code derived from the Raspberry Pi Pico C/C++ SDK. Such files are subject to the corresponding Pico SDK license described in the original source distribution.
+| コマンド | 内容 |
+|---|---|
+| `help` / `h` | コマンド一覧を表示 |
+| `status` | TryKernel、LED、UARTの状態を表示 |
+| `echo <text>` | 引数をUARTへ出力 |
+| `led on` | LEDを点灯 |
+| `led off` | LEDを消灯 |
+| `led blink` | LEDを点滅 |
+| `print` | `mini_printf()`の書式テスト |
 
+`mini_printf()`は、現在次の書式に対応しています。
 
----
+```text
+%s  %c  %d  %u  %x  %%
+```
 
-## Future Work
+### 動作例
 
-今後の予定です。
+```text
+> h
+commands:
+   help -  show command list
+   h -  show command list
+   status -  show system status
+   echo -  echo arguments
+   led -  led on/off/blink
+   print -  print test
+> status
+TryKernel status: running
+LED mode: OFF
+UART TX queue: OK
+UART TX overflow count: 0
+UART RX overflow count: 0
+UART RX HW overrun count: 0
+> print
+test: abc Z -123 456 1a2b3c %
+```
 
-* センサー管理モジュールの追加
-* ダミーセンサータスクの追加
-* `sensor` コマンドの追加
-* I2Cドライバの追加
-* 実センサーの接続
-* READMEの構成図追加
-* Note記事化
+## タスク構成
+
+数字が小さいほど優先度が高くなります。
+
+| タスク | 優先度 | 役割 |
+|---|---:|---|
+| UART RX | 4 | FIFOのポーリング、リングバッファ、コンソール入力 |
+| UART TX | 6 | 送信キューの取り出しとUART出力 |
+| UART Log A | 8 | 送信競合テスト用ログ |
+| UART Log B | 10 | 送信競合テスト用ログ |
+| LED | 12 | LEDの点灯・消灯・点滅 |
+
+ログタスクの出力は、`user/task_uartlog.c`の`ENABLE_UART_LOG_TEST`で有効または無効にできます。現在の初期値は無効です。
+
+## ディレクトリ構成
+
+```text
+.
+├── boot/       # boot2、リセットハンドラ、ベクタテーブル
+├── drivers/    # GPIO、UARTドライバ
+├── include/    # TryKernel API、型、レジスタ、設定定義
+├── kernel/     # スケジューラ、タスク、同期機能
+├── linker/     # RP2040用リンカスクリプト
+├── user/       # ユーザータスク、コンソール、UART送信機能
+└── Makefile
+```
+
+## 実装上の制約
+
+- RP2040のコア0だけを使用するシングルコア構成です。
+- UART受信は割り込みではなく、タスクによるポーリング方式です。
+- 115200 bpsで長い文字列を連続送信すると、32文字のRX FIFOが満杯になり、ハードウェア・オーバーランが発生する可能性があります。
+- `UART RX HW overrun count`は、オーバーランを検出した回数です。失われた正確な文字数ではありません。
+- コンソールの改行入力は現在CRのみを処理します。LFまたはCRLFへの対応は今後の課題です。
+- UART送信キューは16件、1メッセージは終端文字を含めて128バイトです。長い文字列は最大127文字で切り詰められます。
+- TryKernel APIは学習に必要な範囲の部分実装であり、T-Kernel仕様への完全準拠を目的としていません。
+
+## 原典からの変更について
+
+本プロジェクトは、『Interface 2023年7月号』に掲載された
+RP2040向けシングルコア版TryKernelを基にしています。
+
+学習および動作確認のため、掲載版に対して一部の修正と機能追加を
+行っています。本リポジトリは、原著者またはCQ出版社による
+公式な修正版ではありません。
+
+主な変更内容は次のとおりです。
+
+### TryKernel本体の修正
+
+- `tk_wup_tsk()`のレディキュー添字を修正
+- タスク、セマフォ、イベントフラグAPIの一部に引数検査を追加
+- UART受信オーバーラン検出に必要なレジスタ定義を追加
+
+### ユーザー機能・ドライバの追加
+
+- GPIOドライバとLED制御タスク
+- UART受信リングバッファ
+- UART送信キューと専用送信タスク
+- セマフォによるUART送信キューの排他制御
+- イベントフラグによる送信タスクの起床
+- UARTコンソールとコマンド処理
+- UART受信ハードウェアオーバーランの検出・表示
+## 今後の予定
+
+- UART受信の割り込み方式への移行
+- CR、LF、CRLFすべてへの対応
+- UARTのエラー情報と統計表示の拡充
+- TryKernel内部の理解を進めながら、必要な機能を段階的に追加
+
+## 参考資料
+
+- [Interface 2023年7月号「ラズパイPicoで1500行 ゼロから作るOS」](https://interface.cqpub.co.jp/magazine/202307/)
+- [RP2040 Datasheet（Raspberry Pi公式）](https://pip.raspberrypi.com/documents/RP-008371-DS-rp2040-datasheet.pdf)
+
+## ライセンスと原典について
+
+本リポジトリは、『Interface』2023年7月号
+「ラズパイPicoで1500行 ゼロから作るOS」に掲載された
+Try Kernel（Copyright (c) 2023 Yuichi Toyoyama）を基に、
+学習目的で一部を修正し、機能を追加したものです。
+
+Try Kernel由来のコードはMIT Licenseに従います。
+本リポジトリで追加・変更したコードについても、特に記載がない限り
+MIT Licenseで公開します。
+
+著作権表示およびライセンスの詳細は、リポジトリ内の`LICENSE`と
+各ソースファイルのライセンス表示を確認してください。
+
+なお、`boot2.c`など個別のライセンス表示があるファイルについては、
+そのファイルに記載されたライセンス条件が適用されます。
+
+本リポジトリは学習目的の非公式な派生版であり、
+原著者およびCQ出版社による公式な修正版ではありません。

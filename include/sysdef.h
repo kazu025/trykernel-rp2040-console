@@ -117,6 +117,7 @@
 #define UART1_BASE              0x40038000
 
 #define UARTx_DR                (0x000)
+#define UARTx_RSR_ECR           (0x004)
 #define UARTx_FR                (0x018)
 #define UARTx_IBRD              (0x024)
 #define UARTx_FBRD              (0x028)
@@ -128,6 +129,7 @@
 #define UART_CR_EN              (1<<0)
 #define UART_FR_RXFE            (1<<4)  // Receive FIFO Empty (1: empty, 0: not empty)
 #define UART_FR_TXFF            (1<<5)  // Transmit FIFO Full（1: full, 0: not full）
+#define UART_RSR_OE             (1<<3)
 
 /* IOPORT レジスタ */
 #define SIO_BASE                0xD0000000

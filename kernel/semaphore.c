@@ -1,4 +1,4 @@
-﻿/* 
+﻿/*
  *** Try Kernel
  *      セマフォ
 */
@@ -13,9 +13,12 @@ ID tk_cre_sem( const T_CSEM *pk_csem )
 {
     ID      semid;
     UINT    intsts;
+    if(pk_csem == NULL) return E_PAR;
+    if(pk_csem->isemcnt < 0) return E_PAR;
+    if(pk_csem->maxsem <=0 || pk_csem->maxsem < pk_csem->isemcnt) return E_PAR;
 
     DI(intsts);     // 割込み禁止
-    for(semid = 0; semcb_tbl[semid].state != KS_NONEXIST; semid++);
+    for(semid = 0; semid < CNF_MAX_SEMID && semcb_tbl[semid].state != KS_NONEXIST; semid++);
 
     if(semid < CNF_MAX_SEMID) {
         /* セマフォ管理情報の初期化 */
@@ -38,30 +41,28 @@ ER tk_wai_sem( ID semid, INT cnt, TMO tmout )
     UINT    intsts;
 
     if(semid <= 0 || semid > CNF_MAX_SEMID) return E_ID;
+    semcb = &semcb_tbl[--semid];
+    if(semcb->state != KS_EXIST) return E_NOEXS;
+    if (cnt <=0 || semcb->maxsem < cnt) return E_PAR;
 
     DI(intsts);     // 割込み禁止
-    semcb = &semcb_tbl[--semid];
-    if(semcb->state == KS_EXIST) {
-        if(semcb->semcnt >= cnt) {          // 現在のセマフォの資源数 ≧ 要求する資源数
-            semcb->semcnt -= cnt;
-        } else if(tmout == TMO_POL) {       // 資源が足りなく、かつ、待ち時間0の場合
-            err = E_TMOUT;
-        } else {                            // 資源が足りなく、待ち状態に移行
-            tqueue_remove_top(&ready_queue[cur_task->itskpri]);     // タスクをレディキューから外す
+    if(semcb->semcnt >= cnt) {          // 現在のセマフォの資源数 ≧ 要求する資源数
+        semcb->semcnt -= cnt;
+    } else if(tmout == TMO_POL) {       // 資源が足りなく、かつ、待ち時間0の場合
+        err = E_TMOUT;
+    } else {                            // 資源が足りなく、待ち状態に移行
+        tqueue_remove_top(&ready_queue[PRI_INDEX(cur_task->itskpri)]);     // タスクをレディキューから外す
 
-            /* TCBの各種情報を変更する */
-            cur_task->state  = TS_WAIT;      // タスクの状態を待ち状態に変更
-            cur_task->waifct = TWFCT_SEM;    // 待ち要因を設定
-            cur_task->waiobj = semid;        // 待ちセマフォIDを設定
-            cur_task->waitim = ((tmout == TMO_FEVR)? tmout: tmout + TIMER_PERIOD);    // 待ち時間を設定
-            cur_task->waisem = cnt;
-            cur_task->waierr = &err;
+        /* TCBの各種情報を変更する */
+        cur_task->state  = TS_WAIT;      // タスクの状態を待ち状態に変更
+        cur_task->waifct = TWFCT_SEM;    // 待ち要因を設定
+        cur_task->waiobj = semid;        // 待ちセマフォIDを設定
+        cur_task->waitim = ((tmout == TMO_FEVR)? tmout: tmout + TIMER_PERIOD);    // 待ち時間を設定
+        cur_task->waisem = cnt;
+        cur_task->waierr = &err;
 
-            tqueue_add_entry(&wait_queue, cur_task);                // タスクをウェイトキューに繋ぐ
-            scheduler();                                            // スケジューラを実行
-        }
-    } else {
-        err = E_NOEXS;      // 未登録のセマフォ
+        tqueue_add_entry(&wait_queue, cur_task);                // タスクをウェイトキューに繋ぐ
+        scheduler();                                            // スケジューラを実行
     }
     EI(intsts);     // 割込み許可
     return err;
@@ -71,18 +72,20 @@ ER tk_wai_sem( ID semid, INT cnt, TMO tmout )
 ER tk_sig_sem( ID semid, INT cnt )
 {
     SEMCB   *semcb;
-    TCB     *tcb;
+    TCB     *tcb, *next;
     ER      err = E_OK;
     UINT    intsts;
 
     if(semid <= 0 || semid > CNF_MAX_SEMID) return E_ID;
+    if(cnt <= 0) return E_PAR;
 
     DI(intsts);     // 割込み禁止
     semcb = &semcb_tbl[--semid];
     if(semcb->state == KS_EXIST) {
         semcb->semcnt += cnt;                                       // 資源の返却
         if(semcb->semcnt <= semcb->maxsem) {
-            for( tcb = wait_queue; tcb != NULL; tcb = tcb->next) {  // レディキューのタスクを確認
+            for( tcb = wait_queue; tcb != NULL; tcb = next) {  // レディキューのタスクを確認
+                next = tcb->next; // tqueue_add_entry()で tcb->next= NULLとしているため
                 if((tcb->waifct == TWFCT_SEM)&&(tcb->waiobj == semid)) {
                     if( semcb->semcnt >= tcb->waisem) {             // 要求資源数を満たしていれば実行可能状態へ
                         semcb->semcnt -= tcb->waisem;
@@ -91,9 +94,9 @@ ER tk_sig_sem( ID semid, INT cnt )
                         /* TCBの各種情報を変更する */
                         tcb->state	= TS_READY;
                         tcb->waifct	= TWFCT_NON;
-                        tcb->waierr = &err;
+                        *tcb->waierr = E_OK;
 
-                        tqueue_add_entry( &ready_queue[tcb->itskpri], tcb); // タスクをレディキューへつなぐ
+                        tqueue_add_entry( &ready_queue[PRI_INDEX(tcb->itskpri)], tcb); // タスクをレディキューへつなぐ
                         scheduler();                                        // スケジューラを実行
                     } else {
                         break;

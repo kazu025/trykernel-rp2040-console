@@ -1,15 +1,16 @@
 #include <trykernel.h>
-#include "uart.h"
 #include "task_led.h"
 #include "command.h"
-
-
+#include "uart_tx.h"
+#include "uart.h"
 /* --- コマンドバッファ最大数 --- */
-#define CMD_MAX_ARGS    8
+#define CMD_MAX_ARGS    16
+#define CMD_OUTPUT_BUF_SIZE 128U
 static void cmd_help(int argc, char *argv[]);
 static void cmd_status(int argc, char *argv[]);
 static void cmd_echo(int argc, char *argv[]);
 static void cmd_led(int argc, char *argv[]);
+static void cmd_print(int argc, char *argv[]);
 static int split_args(char *line, char *argv[], int max_args);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
@@ -20,9 +21,11 @@ typedef struct {
 } command_t;
 static const command_t command_table[] = {
     {"help",    cmd_help,   "show command list"},
+    {"h",    cmd_help,   "show command list"},
     {"status",  cmd_status, "show system status"},
     {"echo",    cmd_echo,  "echo arguments"},
-    {"led",     cmd_led,    "led on/off/blink"}
+    {"led",     cmd_led,    "led on/off/blink"},
+    {"print",   cmd_print,  "print test"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -38,13 +41,8 @@ void command_execute(char *line){
             return;
         }
     }
-    uart_puts("unknown command: ");
-    uart_puts(argv[0]);
-    uart_puts("\r\n");
+    uart_tx_printf("unknown command: %s\r\n", argv[0]);
 }
-
-
-
 /*
  * 文字列比較
  */
@@ -85,54 +83,79 @@ static int split_args(char *line, char *argv[], int max_args){
 static void cmd_help(int argc, char *argv[]){
     (void)argc;
     (void)argv;
-    uart_puts("commands:\r\n");
+    uart_tx_send("commands:\r\n");
     for(int i=0; i<command_count; i++){
-        uart_puts("   ");
-        uart_puts(command_table[i].name);
-        uart_puts(" - ");
-        uart_puts(command_table[i].help);
-        uart_puts("\r\n");
-    }   
+        uart_tx_printf("   %s -  %s\r\n", command_table[i].name, command_table[i].help);
+    }
 }
 /*
  * コマンド:status　(ステータス表示)
  */
 static void cmd_status(int argc, char *argv[]){
+   UW overflow_count;
    (void)argc; (void)argv;
-   uart_puts("TryKernel status: running\r\n"); 
-   uart_puts("LED mode: ");
-   uart_puts(led_task_mode_name());
-   uart_puts("\r\n");
+   overflow_count = uart_tx_get_overflow_count();
+    uart_tx_send("TryKernel status: running\r\n");
+    uart_tx_printf("LED mode: %s\r\n", led_task_mode_name());
+    uart_tx_printf("UART TX queue: %s\r\n",
+        overflow_count != 0U ? "overflow detected" : "OK") ;
+    uart_tx_printf("UART TX overflow count: %u\r\n", (UINT)overflow_count);
+    uart_tx_printf("UART RX overflow count: %u\r\n", (UINT)uart_rx_overflow_count());
+    uart_tx_printf("UART RX HW overrun count: %u\r\n", (UINT)uart_rx_hw_overrun_count());
 }
 /*
  * コマンド:Echo (Echo 表示)
  */
 static void cmd_echo(int argc, char *argv[]){
+    char text[CMD_OUTPUT_BUF_SIZE];
+    UW pos = 0U;
+    /*
+     * 引数を空白で連結 最後のCR/LF/NULLに3バイト残す
+     */
     for(int i=1; i<argc; i++){
-        uart_puts(argv[i]);
-        if(i != argc - 1)
-            uart_puts(" ");
+        const char *src = argv[i];
+        while((*src != '\0') && (pos < (CMD_OUTPUT_BUF_SIZE - 3U))){
+            text[pos++] = *src++;
+        }
+        if((i != (argc - 1)) && (pos < (CMD_OUTPUT_BUF_SIZE - 3U))){
+            text[pos] = ' ';
+            pos++;
+        }
     }
-    uart_puts("\r\n");
+    text[pos++] = '\r';
+    text[pos++] = '\n';
+    text[pos] = '\0';
+
+    uart_tx_send(text);
 }
 /*
  * コマンド:LED (LED表示)
  */
 static void cmd_led(int argc, char *argv[]){
     if (argc < 2){
-        uart_puts("usage: led on|off|blink\r\n");
+        uart_tx_send("usage: led on|off|blink\r\n");
         return ;
     }else if (str_eq(argv[1], "on") == TRUE){
         led_task_set_on();
-        uart_puts("led on\r\n");
+        uart_tx_send("led on\r\n");
     }else if (str_eq(argv[1], "off") == TRUE){
         led_task_set_off();
-        uart_puts("led off\r\n");
+        uart_tx_send("led off\r\n");
     }else if (str_eq(argv[1], "blink") == TRUE){
         led_task_blink();
-        uart_puts("led blink\r\n");
+        uart_tx_send("led blink\r\n");
     }else{
-        uart_puts("usage: led on|off|blink\r\n");
+        uart_tx_send("usage: led on|off|blink\r\n");
     }
 }
-
+/*
+ * mini_printf()テスト
+ */
+static void cmd_print(int argc, char* argv[]){
+    (void)argc;
+    (void)argv;
+    uart_tx_printf(
+        "test: %s %c %d %u %x %%\r\n",
+        "abc", 'Z', -123, 456U, 0x1a2b3cU
+    );
+}

@@ -1,4 +1,4 @@
-﻿/* 
+﻿/*
  *** Try Kernel
  *      タスク付属同期機能
 */
@@ -14,7 +14,7 @@ ER tk_dly_tsk( RELTIM dlytim )
 
     DI(intsts);     // 割込みの禁止
     if(dlytim > 0) {
-        tqueue_remove_top(&ready_queue[cur_task->itskpri]); // タスクをレディキューから外す
+        tqueue_remove_top(&ready_queue[PRI_INDEX(cur_task->itskpri)]); // タスクをレディキューから外す
 
         /* TCBの各種情報を変更する */
         cur_task->state   = TS_WAIT;                // タスクの状態を待ち状態に変更
@@ -39,7 +39,7 @@ ER tk_slp_tsk( TMO tmout )
     if ( cur_task->wupcnt > 0 ) {    // 起床要求有り
         cur_task->wupcnt--;
 	} else {                        // 起床要求無し
-        tqueue_remove_top(&ready_queue[cur_task->itskpri]);  // タスクをレディキューから外す
+        tqueue_remove_top(&ready_queue[PRI_INDEX(cur_task->itskpri)]);  // タスクをレディキューから外す
 
         /* TCBの各種情報を変更する */
         cur_task->state   = TS_WAIT;                // タスクの状態を待ち状態に変更
@@ -73,7 +73,7 @@ ER tk_wup_tsk( ID tskid )
         tcb->state	= TS_READY;
         tcb->waifct	= TWFCT_NON;
 
-        tqueue_add_entry(&ready_queue[tcb->itskpri], tcb);      // タスクをレディキューに繋ぐ
+        tqueue_add_entry(&ready_queue[PRI_INDEX(tcb->itskpri)], tcb);      // タスクをレディキューに繋ぐ
         scheduler();                                            // スケジューラの実行
     } else if(tcb->state == TS_READY || tcb->state == TS_WAIT) {    // 実行できる状態の場合
         tcb->wupcnt++;      // 起床要求数を増やす
