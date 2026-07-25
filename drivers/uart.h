@@ -19,4 +19,11 @@ int uart_rx_getc(UB *data);     // リングバッファから１文字取り出
 void uart_rxbuf_init(void);         // 受信バッファの初期化
 UW uart_rx_overflow_count(void);    // 受信バッファのオーバーフロー回数を返す
 UW uart_rx_hw_overrun_count(void);  // オーバーランカウントを返す
+
+typedef void (*UART_RX_NOTIFY_FUNC)(void);
+/*
+ * 受信データ格納時に割り込みコンテキストから呼び出す
+ * 通知関数を登録する
+ */
+void uart_rx_set_notify(UART_RX_NOTIFY_FUNC notify);
 #endif /* UART_H */

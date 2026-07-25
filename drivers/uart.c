@@ -1,7 +1,7 @@
 /*
- * Uart driver for Try Kernel / RP2040 URAT0
- * This driver provides simple polling-based uart send/receive functions.
- * Low-level register access is kept inside this driver.
+ * UART driver for TryKernel / RP2040 UART0
+ * This driver provides polling-based transmission
+ * and interrupt-driven reception.
  */
 #include <trykernel.h>
 #include <knldef.h>
@@ -20,6 +20,7 @@ static volatile UW uart_rx_tail = 0;
 static volatile UW uart_rx_overflow = 0;
 static volatile UW uart_rx_hw_overrun;
 static volatile UB uart_rx_buf[UART_RX_BUF_SIZE];
+static UART_RX_NOTIFY_FUNC uart_rx_notify;
 
 /* ---------------------------------------------------------- */
 /* static func */
@@ -138,14 +139,19 @@ int uart_rx_getc(UB *data){
 }
 /*
  * UART0受信割り込みハンドラ
- * Uart0割り込み発生時にH/W FIFOからソフトウェアリングバッファへデータを転送する。
- * コンソール処理はTryKernel APIの呼び出しは行わない
+ * UART0割り込み発生時にH/W FIFOから
+ * ソフトウェアリングバッファへデータを転送する。
+ *
+ * コンソール処理は行わない。
+ * データ格納後、登録された通知関数を
+ * 割り込みコンテキストから呼び出す。
  */
 void uart0_irq_handler(void){
     UB data;    // 受信データ/
     UW mis;     // 割り込み要因
     UW status;  // 受信エラー状態
     UW clear = 0U; // クリアする割り込み要因
+    BOOL received = FALSE;
 
     mis = in_w(UART0_BASE + UARTx_MIS); // Masked Interrupt Status Register
     status = in_w(UART0_BASE + UARTx_RSR_ECR); // Receive Status Register
@@ -159,7 +165,9 @@ void uart0_irq_handler(void){
     /* FIFO全データ読み出し */
     while(uart_can_recv()){
         data = (UB)(in_w(UART0_BASE + UARTx_DR) & 0xFFU);
-        uart_rxbuf_put(data);
+        if(uart_rxbuf_put(data)){
+            received = TRUE;
+        }
     }
     if((mis & UART_MIS_RXMIS) != 0U){
         /* RX FIFO 割り込み要因クリア */
@@ -172,6 +180,13 @@ void uart0_irq_handler(void){
     if(clear != 0U){
         /* 割り込み要因をクリア */
         out_w(UART0_BASE + UARTx_ICR, clear);
+    }
+    /*
+     * 割り込みコンテキストから通知する
+     * 登録する関数では待ち処理などを行わないこと
+     */
+    if((received != FALSE) && (uart_rx_notify != NULL)){
+        uart_rx_notify();
     }
 }
 /*
@@ -188,3 +203,14 @@ static int uart_rxbuf_put(UB data){
     uart_rx_head = next;
     return 1; // success
 }
+
+/*
+ * 通知関数の登録処理
+ */
+void uart_rx_set_notify(UART_RX_NOTIFY_FUNC notify){
+    UW intsts;
+    DI(intsts);
+    uart_rx_notify = notify;
+    EI(intsts);
+}
+

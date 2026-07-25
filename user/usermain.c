@@ -2,7 +2,7 @@
 #include "gpio.h"
 #include "uart_sync.h"
 #include "uart_tx.h"
-
+#include "task_uartrx.h"
 /*
  * タスク優先度:1〜16
  * 数字が小さいほど優先度が高い
@@ -97,6 +97,10 @@ int usermain(void)
         return (int)ercd;
     }
     ercd = uart_tx_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
+    ercd = task_uartrx_init();
     if(ercd < E_OK){
         return (int)ercd;
     }
