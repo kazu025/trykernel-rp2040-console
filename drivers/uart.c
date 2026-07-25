@@ -19,7 +19,7 @@ static volatile UW uart_rx_head = 0;
 static volatile UW uart_rx_tail = 0;
 static volatile UW uart_rx_overflow = 0;
 static volatile UW uart_rx_hw_overrun;
-static UB uart_rx_buf[UART_RX_BUF_SIZE];
+static volatile UB uart_rx_buf[UART_RX_BUF_SIZE];
 
 /* ---------------------------------------------------------- */
 /* static func */
@@ -41,6 +41,29 @@ void uart_rxbuf_init(void){
     uart_rx_tail = 0;
     uart_rx_overflow = 0;
     uart_rx_hw_overrun = 0;
+}
+/*
+ * UART0受信割り込みを有効化
+ */
+void uart_rx_irq_enable(void){
+    UW intsts;
+    DI(intsts);
+    /* UART側の割り込みをすべてマスク */
+    out_w(UART0_BASE + UARTx_IMSC, 0U);
+    /* UART0の保留中割り込みをクリアする */
+    out_w(UART0_BASE + UARTx_ICR,
+        UART_ICR_RXIC | UART_ICR_RTIC | UART_ICR_OEIC);
+    out_w(NVIC_ICPR, UART0_IRQ_MASK);
+    /*
+     * RXIM : RX FIFOがしきい値に達したとき
+     * RTIM : RX FIFOにデータが残ったまま32ビット期間受信がないとき
+     * OEIM : RX FIFOのオーバーランが発生したとき
+     */
+    out_w(UART0_BASE + UARTx_IMSC,
+        UART_IMSC_RXIM | UART_IMSC_RTIM | UART_IMSC_OEIM);
+    /* NVICでUART0 IRQ(IRQ20) を有効化する */
+    out_w(NVIC_ISER, UART0_IRQ_MASK);
+    EI(intsts);
 }
 /*
  * 送信FiFo Full
@@ -114,24 +137,43 @@ int uart_rx_getc(UB *data){
     return 1; // success
 }
 /*
- * Uart H/W Fifoからリングバッファへデータを転送
+ * UART0受信割り込みハンドラ
+ * Uart0割り込み発生時にH/W FIFOからソフトウェアリングバッファへデータを転送する。
+ * コンソール処理はTryKernel APIの呼び出しは行わない
  */
-void uart_rx_poll(void){
-    UB data;
-    UW status;
+void uart0_irq_handler(void){
+    UB data;    // 受信データ/
+    UW mis;     // 割り込み要因
+    UW status;  // 受信エラー状態
+    UW clear = 0U; // クリアする割り込み要因
 
-    status = in_w(UART0_BASE + UARTx_RSR_ECR);
-    if((status & UART_RSR_OE) != 0){
+    mis = in_w(UART0_BASE + UARTx_MIS); // Masked Interrupt Status Register
+    status = in_w(UART0_BASE + UARTx_RSR_ECR); // Receive Status Register
+    /* HW overrun　検出 */
+    if(((mis & UART_MIS_OEMIS) != 0U) || ((status & UART_RSR_OE) != 0U)){
         uart_rx_hw_overrun++;
-        /* エラー状態をクリア */
+        /* error clear */
         out_w(UART0_BASE + UARTx_RSR_ECR, 0U);
+        clear |= UART_ICR_OEIC;
     }
+    /* FIFO全データ読み出し */
     while(uart_can_recv()){
         data = (UB)(in_w(UART0_BASE + UARTx_DR) & 0xFFU);
         uart_rxbuf_put(data);
     }
+    if((mis & UART_MIS_RXMIS) != 0U){
+        /* RX FIFO 割り込み要因クリア */
+        clear |= UART_ICR_RXIC;
+    }
+    if((mis & UART_MIS_RTMIS) != 0U){
+        /* 受信タイムアウト割り込み要因クリア */
+        clear |= UART_ICR_RTIC;
+    }
+    if(clear != 0U){
+        /* 割り込み要因をクリア */
+        out_w(UART0_BASE + UARTx_ICR, clear);
+    }
 }
-
 /*
  * 受信バッファへ１文字入れる
  */

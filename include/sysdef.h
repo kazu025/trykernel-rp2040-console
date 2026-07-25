@@ -123,6 +123,9 @@
 #define UARTx_FBRD              (0x028)
 #define UARTx_LCR_H             (0x02C)
 #define UARTx_CR                (0x030)
+#define UARTx_IMSC              (0x038)
+#define UARTx_MIS               (0x040)
+#define UARTx_ICR               (0x044)
 
 #define UART_CR_RXE             (1<<9)
 #define UART_CR_TXE             (1<<8)
@@ -130,6 +133,18 @@
 #define UART_FR_RXFE            (1<<4)  // Receive FIFO Empty (1: empty, 0: not empty)
 #define UART_FR_TXFF            (1<<5)  // Transmit FIFO Full（1: full, 0: not full）
 #define UART_RSR_OE             (1<<3)
+
+#define UART_IMSC_RXIM          (1<<4)  // Receive FIFO interrupt mask
+#define UART_IMSC_RTIM          (1<<6)  // Receive timeout interrupt mask
+#define UART_IMSC_OEIM          (1<<10) // Overrun error interrupt mask
+
+#define UART_MIS_RXMIS          (1<<4)  // Receive FIFO masked interrupt status
+#define UART_MIS_RTMIS          (1<<6)  // Receive timeout masked interrupt status
+#define UART_MIS_OEMIS          (1<<10) // Overrun error masked interrupt status
+
+#define UART_ICR_RXIC           (1<<4)  // Receive FIFO interrupt clear
+#define UART_ICR_RTIC           (1<<6)  // Receive timeout interrupt clear
+#define UART_ICR_OEIC           (1<<10) // Overrun error interrupt clear
 
 /* IOPORT レジスタ */
 #define SIO_BASE                0xD0000000
@@ -168,7 +183,12 @@
 #define	MHz                     (KHz*1000)
 
 /* NVIC レジスタ */
+#define NVIC_ISER               (0xE000E100)
+#define NVIC_ICPR               (0xE000E280)
 #define SCB_SHPR3               (0xE000ED20)
+
+#define UART0_IRQ_NUM           20
+#define UART0_IRQ_MASK          (1UL << UART0_IRQ_NUM)
 
 #define	INTLEVEL_0              (0x00)
 #define	INTLEVEL_1              (0x40)

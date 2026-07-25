@@ -1,4 +1,4 @@
-﻿/* 
+/*
  *** Try Kernel
  *      例外ベクターテーブル
 */
@@ -9,6 +9,7 @@
 #include <knldef.h>
 
 extern void dispatch_entry(void);       /* ディスパッチャ */
+extern void uart0_irq_handler(void);    /* UART0受信割り込み */
 /* デフォルトハンドラ */
 void Default_Handler(void)
 {
@@ -33,16 +34,16 @@ void (* const vector_tbl[])() __attribute__((section(".vector"))) = {
     0,                          // 13: 未使用
     dispatch_entry,             // 14: Pend SV
     systimer_handler,           // 15: Systick
-    Default_Handler,            // IRQ 0 
-    Default_Handler,            // IRQ 1 
-    Default_Handler,            // IRQ 2 
-    Default_Handler,            // IRQ 3 
-    Default_Handler,            // IRQ 4 
-    Default_Handler,            // IRQ 5 
-    Default_Handler,            // IRQ 6 
-    Default_Handler,            // IRQ 7 
-    Default_Handler,            // IRQ 8 
-    Default_Handler,            // IRQ 9 
+    Default_Handler,            // IRQ 0
+    Default_Handler,            // IRQ 1
+    Default_Handler,            // IRQ 2
+    Default_Handler,            // IRQ 3
+    Default_Handler,            // IRQ 4
+    Default_Handler,            // IRQ 5
+    Default_Handler,            // IRQ 6
+    Default_Handler,            // IRQ 7
+    Default_Handler,            // IRQ 8
+    Default_Handler,            // IRQ 9
     Default_Handler,            // IRQ 10
     Default_Handler,            // IRQ 11
     Default_Handler,            // IRQ 12
@@ -53,7 +54,7 @@ void (* const vector_tbl[])() __attribute__((section(".vector"))) = {
     Default_Handler,            // IRQ 17
     Default_Handler,            // IRQ 18
     Default_Handler,            // IRQ 19
-    Default_Handler,            // IRQ 20
+    uart0_irq_handler,          // IRQ 20: UART0
     Default_Handler,            // IRQ 21
     Default_Handler,            // IRQ 22
     Default_Handler,            // IRQ 23
