@@ -51,6 +51,23 @@ static inline UW get_primask( void )
     return pm;
 }
 
+/* IPSRレジスタの取得 */
+static inline UW get_ipsr(void)
+{
+    UW ipsr;
+    __asm__ volatile("mrs %0, ipsr" : "=r"(ipsr));
+    return ipsr;
+}
+
+/*  割り込みコンテキスト判定 */
+/*
+ * IPSR:「今どの例外/割り込みを処理しているのか」を示すレジスタ
+ * 0:通常 2:NMI 3:HardFault 11:SVCall 14:PendSV 15:SysTick 16:外部IRQ0 ... 36:外部IRQ20
+ */
+static inline BOOL is_interrupt_context(void)
+{
+    return(get_ipsr() != 0U);
+}
 /* 割込み禁止マクロ */
 #define	DI(intsts)	(intsts=get_primask(), set_primask(1))
 

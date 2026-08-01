@@ -12,6 +12,9 @@ ER tk_dly_tsk( RELTIM dlytim )
     UINT    intsts;
     ER      err = E_OK;
 
+    /* 割り込み・例外コンテキストからの待ちは禁止 */
+    if(is_interrupt_context()) return E_CTX;
+
     DI(intsts);     // 割込みの禁止
     if(dlytim > 0) {
         tqueue_remove_top(&ready_queue[PRI_INDEX(cur_task->itskpri)]); // タスクをレディキューから外す
@@ -35,6 +38,9 @@ ER tk_slp_tsk( TMO tmout )
     UINT    intsts;
     ER      err = E_OK;
 
+    /* 割り込み・例外コンテキストからの待ちは禁止 */
+    if(is_interrupt_context()) return E_CTX;
+    
     DI(intsts);     // 割込みの禁止
     if ( cur_task->wupcnt > 0 ) {    // 起床要求有り
         cur_task->wupcnt--;

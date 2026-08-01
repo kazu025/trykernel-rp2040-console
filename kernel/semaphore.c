@@ -40,6 +40,9 @@ ER tk_wai_sem( ID semid, INT cnt, TMO tmout )
     ER      err = E_OK;
     UINT    intsts;
 
+    /* 割り込み・例外コンテキストからの待ちは禁止 */
+    if(is_interrupt_context()) return E_CTX;
+
     if(semid <= 0 || semid > CNF_MAX_SEMID) return E_ID;
     semcb = &semcb_tbl[--semid];
     if(semcb->state != KS_EXIST) return E_NOEXS;

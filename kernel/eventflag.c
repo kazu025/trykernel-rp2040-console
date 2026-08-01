@@ -111,6 +111,9 @@ ER tk_wai_flg( ID flgid, UINT waiptn, UINT wfmode, UINT *p_flgptn, TMO tmout )
     ER      err = E_OK;
     UINT    intsts;
 
+    /* 割り込み・例外コンテキストからの待ちは禁止 */
+    if(is_interrupt_context()) return E_CTX;
+
     if(flgid <= 0 || flgid > CNF_MAX_FLGID) return E_ID;
     if(p_flgptn == NULL || waiptn == 0) return E_PAR;
 

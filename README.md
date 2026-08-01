@@ -39,6 +39,7 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - セマフォ
 - イベントフラグ
 - タスク付帯同期
+- 割り込み・例外コンテキストの判定
 - SysTickによる10ms周期の時間管理
 - 最大32タスク
 - タスク優先度1～16
@@ -473,6 +474,7 @@ test: abc Z -123 456 1a2b3c %
 - `mini_printf()`は機能を限定した独自実装です。
 - TryKernel APIは学習に必要な範囲の部分実装です。
 - T-Kernel仕様への完全準拠を目的としていません。
+- 待ちを発生させるTryKernel APIは、割り込み・例外コンテキストから呼び出せません。
 - 割り込みからの`tk_set_flg()`は、本プロジェクトのTryKernel実装を前提としています。
 
 ## 原典からの変更について
@@ -491,6 +493,9 @@ test: abc Z -123 456 1a2b3c %
 - イベントフラグAPIの一部に引数検査を追加
 - UART割り込みに必要なNVICとUARTレジスタ定義を追加
 - UART受信オーバーラン検出に必要なレジスタ定義を追加
+- IPSRによる割り込み・例外コンテキスト判定を追加
+- `tk_wai_flg()`、`tk_wai_sem()`、`tk_dly_tsk()`、`tk_slp_tsk()`にコンテキストチェックを追加
+- 割り込み・例外コンテキストから待ち系APIを呼び出した場合は`E_CTX`を返すように変更
 
 ### ユーザー機能・ドライバの追加
 
@@ -539,13 +544,105 @@ UART受信タスク起床
 
 これにより、受信データがない間の周期ポーリングが不要になりました。
 
+
+### 第三段階
+
+割り込みからTryKernel APIを安全に使用できるようにするため、Cortex-M0+のIPSR（Interrupt Program Status Register）を使用して、現在の実行コンテキストを判定する処理を追加しました。
+
+```c
+static inline UW get_ipsr(void)
+{
+    UW ipsr;
+
+    __asm__ volatile("mrs %0, ipsr" : "=r"(ipsr));
+
+    return ipsr;
+}
+
+static inline BOOL is_interrupt_context(void)
+{
+    return (get_ipsr() != 0U);
+}
+```
+
+IPSRには、現在処理している例外番号が格納されます。
+
+```text
+IPSR = 0
+    → 通常のThread mode
+
+IPSR != 0
+    → 例外・割り込みハンドラ実行中
+```
+
+RP2040のUART0はIRQ20であるため、UART0割り込み中のException Numberは次の値になります。
+
+```text
+16 + IRQ20 = 36 = 0x24
+```
+
+GDBを使用して実機で確認した結果、通常のタスク実行中とUART0割り込み中で次の値になりました。
+
+| 停止位置                  |         xPSR |       IPSR | 実行状態        |
+| --------------------- | -----------: | ---------: | ----------- |
+| `task_uartrx()`       | `0x01000000` |        `0` | Thread mode |
+| `uart0_irq_handler()` | `0x61000024` | `36（0x24）` | UART0 IRQ   |
+
+割り込みハンドラにはタスクのようなTCBは存在しません。
+
+そのため、割り込み中に待ちを発生させるAPIを呼び出すと、`cur_task`が指している割り込まれたタスクを誤ってWAIT状態へ移行させる可能性があります。
+
+これを防ぐため、次の待ち系APIにコンテキストチェックを追加しました。
+
+| API            | 処理        |
+| -------------- | --------- |
+| `tk_wai_flg()` | イベントフラグ待ち |
+| `tk_wai_sem()` | セマフォ資源待ち  |
+| `tk_dly_tsk()` | タスク遅延     |
+| `tk_slp_tsk()` | タスク起床待ち   |
+
+各APIの先頭で実行コンテキストを確認します。
+
+```c
+if (is_interrupt_context()) {
+    return E_CTX;
+}
+```
+
+割り込み・例外コンテキストからこれらのAPIが呼ばれた場合は、TCBやREADY／WAITキューを変更せず、`E_CTX (-25)`を返します。
+
+動作確認としてUART0割り込みからテスト用に`tk_wai_flg()`を呼び出し、GDBで次の戻り値を確認しました。
+
+```text
+E_CTX = -25
+```
+
+一方、UART受信割り込みで使用している`tk_set_flg()`は、待ち状態のUART RXタスクをREADY状態へ移行する通知側のAPIです。
+
+現在のUART受信処理では、引き続き割り込みハンドラから`tk_set_flg()`を使用しています。
+
+```text
+UART0 IRQ
+    ↓
+uart_rx_notify_from_isr()
+    ↓
+tk_set_flg()
+    ↓
+UART RX task
+WAIT → READY
+    ↓
+PendSVを保留
+    ↓
+割り込み復帰後に必要に応じてタスク切り替え
+```
+
 ## 今後の予定
 
 - CR、LF、CRLFすべてへの対応
 - UARTエラー情報と統計表示の拡充
-- 割り込みから呼び出せるTryKernel APIの整理
+- `tk_set_flg()`、`tk_sig_sem()`、`tk_wup_tsk()`など待ち解除側APIの割り込みコンテキストでの利用条件整理
 - UART受信割り込み処理の改善
-- GDBを使ったWAITキューとタスク状態の確認
+- GDBを使ったREADYキュー、WAITキュー、タスク状態、例外処理の確認
 - TryKernel内部の理解を進めながら、必要な機能を段階的に追加
 
 ## 参考資料
