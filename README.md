@@ -804,6 +804,345 @@ UART RXタスクの実行へ移行
 
 この確認により、UART受信割り込みからイベントフラグを経由してUART RXタスクを起床させる処理が、TCB、READYキュー、スケジューラ、ディスパッチャまで一連の流れとして動作していることを確認できました。
 
+### 通常タスク実行中のプリエンプションをGDBで確認
+
+前節では、`disp_020`で実行可能タスクを待っている途中にUART0割り込みが発生したケースを確認しました。
+
+次に、通常のLEDタスク実行中にUART0割り込みを発生させ、高優先度のUART RXタスクがREADYになった結果、PendSVを経由してプリエンプティブにタスクが切り替わる流れをGDBで確認しました。
+
+UART0割り込み発生時のバックトレースは次のようになりました。
+
+```text
+#0  uart_rx_notify_from_isr()
+#1  uart0_irq_handler()
+#2  <signal handler called>
+#3  task_led1()
+```
+
+このとき、現在実行中のタスクはLEDタスクでした。
+
+```text
+cur_task->itskpri = 12
+disp_running      = 0
+```
+
+一方、`tk_set_flg()`で見つかったUART RXタスクは次の状態でした。
+
+```text
+state   = TS_WAIT
+waifct  = TWFCT_FLG
+waiobj  = 1
+itskpri = 4
+```
+
+したがって、UART0割り込み発生時には次の状態になっています。
+
+```text
+実行中タスク:
+    LED task
+    priority = 12
+
+起床対象:
+    UART RX task
+    priority = 4
+```
+
+数字が小さいほど優先度が高いため、UART RXタスクの方が高優先度です。
+
+`tk_set_flg()`によってUART RXタスクがREADY状態になり、`ready_queue[3]`へ登録された後、`scheduler()`を実行すると、次の状態になりました。
+
+```text
+i            = 3
+sche_task    = 0x20000338   // UART RX task
+cur_task     = 0x200002f4   // LED task
+disp_running = 0
+```
+
+このため、
+
+```c
+if (sche_task != cur_task && !disp_running) {
+    dispatch();
+}
+```
+
+の条件が成立し、`dispatch()`が呼び出されました。
+
+`dispatch()`ではSCBのICSRレジスタへ`ICSR_PENDSVSET`を書き込み、PendSVを保留状態にします。
+
+```c
+static inline void dispatch(void)
+{
+    out_w(SCB_ICSR, ICSR_PENDSVSET);
+}
+```
+
+GDBでICSRを確認したところ、次の値になりました。
+
+```text
+ICSR = 0x1040e024
+```
+
+`PENDSVSET`はbit 28（`0x10000000`）であるため、PendSVがpendingになっていることを確認できました。
+
+UART0割り込みから復帰すると、PendSVハンドラである`dispatch_entry()`へ入りました。
+
+```text
+Breakpoint, dispatch_entry()
+```
+
+`dispatch_entry()`突入時は次の状態でした。
+
+```text
+disp_running = 0
+cur_task     = 0x200002f4   // LED task
+sche_task    = 0x20000338   // UART RX task
+```
+
+また、`info registers`で確認したxPSRは次の値でした。
+
+```text
+xPSR = 0x0100000e
+```
+
+下位のException Numberは`0x0e = 14`であり、PendSV例外を実行中であることを確認できました。
+
+#### 実行中タスクのコンテキスト保存
+
+`dispatch_entry()`では最初に割り込みを禁止し、`disp_running`を1にします。
+
+```text
+PRIMASK      = 1
+disp_running = 1
+```
+
+続いて、LEDタスクの`r4-r11`をソフトウェアでスタックへ保存します。
+
+```asm
+push    {r4-r7}
+mov     r0, r8
+mov     r1, r9
+mov     r2, r10
+mov     r3, r11
+push    {r0-r3}
+```
+
+最初の`push {r4-r7}`では、SPが16バイト減少しました。
+
+```text
+0x20000f58
+    ↓
+0x20000f48
+```
+
+さらに`r8-r11`相当を保存する`push {r0-r3}`により、SPは次の値になりました。
+
+```text
+0x20000f48
+    ↓
+0x20000f38
+```
+
+保存完了後のSPは、現在実行中だったLEDタスクのTCBへ保存されます。
+
+```asm
+mov     r2, sp
+str     r2, [r1]
+```
+
+GDBでLEDタスクのTCB先頭を確認したところ、保存されたSPと一致しました。
+
+```text
+LED task TCB = 0x200002f4
+saved SP     = 0x20000f38
+```
+
+#### UART RXタスクへの切り替え
+
+次に、`sche_task`からUART RXタスクのTCBを取得します。
+
+```text
+sche_task = 0x20000338
+```
+
+`disp_030`では、まずUART RXタスクを`cur_task`へ設定します。
+
+```asm
+str     r2, [r0]
+```
+
+実行後は次の状態になりました。
+
+```text
+cur_task  = 0x20000338
+sche_task = 0x20000338
+```
+
+続いてUART RXタスクのTCBに保存されているSPを読み出し、CPUのSPへ設定します。
+
+```asm
+ldr     r0, [r2]
+mov     sp, r0
+```
+
+GDBでは次の値を確認できました。
+
+```text
+UART RX task TCB saved SP = 0x200012e8
+SP                         = 0x200012e8
+```
+
+これにより、スタックがLEDタスク側からUART RXタスク側へ切り替わったことを確認できました。
+
+#### UART RXタスクのコンテキスト復元
+
+UART RXタスク側では、保存時とは逆の順序で`r8-r11`、`r4-r7`を復元します。
+
+```asm
+pop     {r0-r3}
+mov     r11, r3
+mov     r10, r2
+mov     r9, r1
+mov     r8, r0
+pop     {r4-r7}
+```
+
+最初の`pop {r0-r3}`では、SPが16バイト増加しました。
+
+```text
+0x200012e8
+    ↓
+0x200012f8
+```
+
+続く`pop {r4-r7}`でも16バイト増加し、次の値になりました。
+
+```text
+0x200012f8
+    ↓
+0x20001308
+```
+
+この時点で、TryKernelがソフトウェアで保存していた`r4-r11`の復元が完了しています。
+
+最後に、
+
+```asm
+ldr     r0, =disp_running
+mov     r1, #0
+str     r1, [r0]
+msr     primask, r1
+bx      lr
+```
+
+によって、
+
+```text
+disp_running = 0
+PRIMASK      = 0
+```
+
+へ戻した後、`bx lr`で例外復帰します。
+
+`bx lr`実行直前は、
+
+```text
+lr   = 0xfffffff9
+xPSR = 0x6100000e
+```
+
+であり、PendSV例外中でした。
+
+`bx lr`実行後は、
+
+```text
+xPSR = 0x41000000
+```
+
+となり、Exception Numberが0になったことからThread modeへ復帰したことを確認しました。
+
+バックトレースも次のようにUART RXタスク側へ戻りました。
+
+```text
+#0  set_primask()
+#1  tk_wai_flg()
+#2  task_uartrx()
+```
+
+また、`cur_task`はUART RXタスクのTCBを指していました。
+
+```text
+cur_task = 0x20000338
+```
+
+以上から、通常タスク実行中にUART0割り込みが発生した場合、次の一連のプリエンプティブなタスク切り替えが行われることを実機GDBで確認できました。
+
+```text
+LED task 実行中
+priority = 12
+    ↓
+UART0 IRQ
+    ↓
+uart_rx_notify_from_isr()
+    ↓
+tk_set_flg()
+    ↓
+UART RX task
+TS_WAIT → TS_READY
+priority = 4
+    ↓
+ready_queue[3]へ登録
+    ↓
+scheduler()
+    ↓
+sche_task = UART RX task
+    ↓
+dispatch()
+    ↓
+ICSR.PENDSVSET = 1
+    ↓
+UART0 IRQから復帰
+    ↓
+PendSV
+    ↓
+dispatch_entry()
+    ↓
+LED taskのr4-r11を保存
+    ↓
+LED taskのSPをTCBへ保存
+    ↓
+cur_task = UART RX task
+    ↓
+UART RX taskのSPへ切り替え
+    ↓
+UART RX taskのr4-r11を復元
+    ↓
+disp_running = 0
+PRIMASK = 0
+    ↓
+bx lr（EXC_RETURN）
+    ↓
+Thread modeへ復帰
+    ↓
+UART RX taskの実行を再開
+```
+
+この確認により、通常タスク実行中に高優先度のUART RXタスクが起床した場合、UART割り込みハンドラ内で直接コンテキストを切り替えるのではなく、`scheduler()`から`dispatch()`を呼び出してPendSVを保留し、UART割り込み復帰後にPendSVハンドラでコンテキストを保存・復元してタスクを切り替えることを確認できました。
+
+前節の`disp_running = 1`のケースと合わせて、次の2つの経路を実機で確認できたことになります。
+
+```text
+disp_running = 1
+    → 既存のdispatcherが動作中
+    → scheduler()から新しいdispatch()は要求しない
+
+disp_running = 0
+    → 通常タスク実行中
+    → 高優先度タスク起床時にdispatch()
+    → PendSV経由でプリエンプション
+```
+
+
 ## 今後の予定
 
 - CR、LF、CRLFすべてへの対応
