@@ -636,6 +636,174 @@ PendSVを保留
 割り込み復帰後に必要に応じてタスク切り替え
 ```
 
+
+### UART受信タスク起床処理のGDB確認
+
+UART0受信割り込みから`tk_set_flg()`が呼び出され、UART RXタスクがWAIT状態からREADY状態へ移行し、実行対象として選択されるまでをGDBで確認しました。
+
+まず、`uart_rx_notify_from_isr()`にブレークポイントを設定し、UARTから1文字入力したところ、次の呼び出し経路を確認できました。
+
+```text
+uart0_irq_handler()
+    ↓
+uart_rx_notify_from_isr()
+    ↓
+tk_set_flg()
+```
+
+GDBのバックトレースでは、次のようになりました。
+
+```text
+#0  tk_set_flg()
+#1  uart_rx_notify_from_isr()
+#2  uart0_irq_handler()
+#3  <signal handler called>
+#4  disp_020()
+```
+
+`tk_set_flg()`内でイベントフラグ待ちのタスクを検索した結果、UART RXタスクのTCBは次の状態でした。
+
+```text
+state   = TS_WAIT
+waifct  = TWFCT_FLG
+waiobj  = 1
+waiptn  = 1
+wfmode  = 33
+itskpri = 4
+```
+
+`itskpri = 4`は、本プロジェクトで設定しているUART RXタスクの優先度と一致します。
+
+続いて`tk_set_flg()`を1行ずつ実行し、TCBの状態が次のように変化することを確認しました。
+
+```text
+state:
+    TS_WAIT
+      ↓
+    TS_READY
+
+waifct:
+    TWFCT_FLG
+      ↓
+    TWFCT_NON
+```
+
+さらに、READYキューへ追加する直前は対象優先度のREADYキューが空でした。
+
+```text
+ready_queue[PRI_INDEX(tcb->itskpri)] = NULL
+tcb = 0x20000338
+```
+
+`tqueue_add_entry()`実行後は、READYキューの先頭とUART RXタスクのTCBが同じアドレスになりました。
+
+```text
+ready_queue[PRI_INDEX(tcb->itskpri)] = 0x20000338
+tcb                                  = 0x20000338
+```
+
+これにより、UART RXタスクがWAITキューから外され、READYキューへ登録されたことを確認できました。
+
+続いて`scheduler()`をステップ実行したところ、READYキューを優先度の高い順に検索し、`i = 3`でUART RXタスクを見つけました。
+
+UART RXタスクの優先度は4であり、READYキューは0始まりのインデックスを使用するため、優先度4は`ready_queue[3]`に対応します。
+
+`scheduler()`実行後は、次の状態になりました。
+
+```text
+sche_task    = 0x20000338
+cur_task     = NULL
+disp_running = 1
+```
+
+この時点で`sche_task`にはUART RXタスクが選択されています。
+
+一方、`disp_running = 1`であるため、
+
+```c
+if (sche_task != cur_task && !disp_running) {
+    dispatch();
+}
+```
+
+の条件は成立せず、この`scheduler()`呼び出しから新たに`dispatch()`は実行されませんでした。
+
+今回の割り込みは、`dispatch.S`の`disp_020`で実行可能タスクを待っている途中に発生していました。
+
+そのため、処理の流れは次のようになります。
+
+```text
+disp_020
+    ↓
+UART0 IRQ
+    ↓
+uart_rx_notify_from_isr()
+    ↓
+tk_set_flg()
+    ↓
+UART RX task
+WAIT → READY
+    ↓
+ready_queue[3]へ登録
+    ↓
+scheduler()
+    ↓
+sche_task = UART RX task
+    ↓
+UART0 IRQから復帰
+    ↓
+既存のdispatcherがsche_taskを確認
+    ↓
+disp_030
+    ↓
+cur_task = sche_task
+```
+
+実際に`disp_030`へブレークポイントを設定したところ、実行直前は次の状態でした。
+
+```text
+sche_task    = 0x20000338
+cur_task     = NULL
+disp_running = 1
+```
+
+`disp_030`の次の命令を1命令だけ実行すると、
+
+```asm
+str r2, [r0]
+```
+
+によって`cur_task`が`sche_task`と同じUART RXタスクのTCBを指すようになりました。
+
+```text
+cur_task  = 0x20000338
+sche_task = 0x20000338
+```
+
+以上から、今回の実機確認では次の一連の動作を確認できました。
+
+```text
+UART0受信割り込み
+    ↓
+tk_set_flg()
+    ↓
+UART RXタスクをWAITキューから削除
+    ↓
+TS_WAIT → TS_READY
+    ↓
+READYキューへ登録
+    ↓
+scheduler()がUART RXタスクをsche_taskに選択
+    ↓
+割り込み復帰
+    ↓
+dispatcherがUART RXタスクをcur_taskに設定
+    ↓
+UART RXタスクの実行へ移行
+```
+
+この確認により、UART受信割り込みからイベントフラグを経由してUART RXタスクを起床させる処理が、TCB、READYキュー、スケジューラ、ディスパッチャまで一連の流れとして動作していることを確認できました。
+
 ## 今後の予定
 
 - CR、LF、CRLFすべてへの対応
