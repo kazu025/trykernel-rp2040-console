@@ -24,6 +24,8 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - イベントフラグによるタスク同期
 - UART受信割り込み
 - 割り込み処理からタスク処理への受け渡し
+- PendSVによる遅延ディスパッチ
+- READYキュー更新後のスケジューリング動作
 - UART送受信バッファ
 - UARTコンソールとコマンド処理
 
@@ -33,6 +35,7 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 
 - Cortex-M0+向けシングルコアRTOS
 - 優先度ベースのプリエンプティブ・スケジューリング
+- PendSVによる遅延ディスパッチ
 - タスク生成・起動・終了
 - タスク遅延
 - タスク起床待ち・起床
@@ -496,6 +499,7 @@ test: abc Z -123 456 1a2b3c %
 - IPSRによる割り込み・例外コンテキスト判定を追加
 - `tk_wai_flg()`、`tk_wai_sem()`、`tk_dly_tsk()`、`tk_slp_tsk()`にコンテキストチェックを追加
 - 割り込み・例外コンテキストから待ち系APIを呼び出した場合は`E_CTX`を返すように変更
+- `tk_set_flg()`で複数タスクを待ち解除した際、`scheduler()`を待ちタスクごとに呼ばず、待ち解除処理完了後に1回だけ実行するよう改善
 
 ### ユーザー機能・ドライバの追加
 
@@ -636,6 +640,137 @@ PendSVを保留
 割り込み復帰後に必要に応じてタスク切り替え
 ```
 
+
+
+### PendSVによる遅延ディスパッチのGDB確認
+
+UART0割り込み内から`tk_set_flg()`を呼び出した場合に、`scheduler()`から`dispatch()`が呼ばれても、その場でUART RXタスクへ直接切り替わらず、UART0割り込み処理を最後まで実行した後にPendSVへ移行することをGDBで確認しました。
+
+確認時はUART TXタスク実行中にUART0割り込みが発生しました。
+
+```text
+task_uarttx()
+    ↓
+UART0 IRQ
+    ↓
+uart0_irq_handler()
+    ↓
+uart_rx_notify_from_isr()
+    ↓
+tk_set_flg()
+    ↓
+scheduler()
+```
+
+`scheduler()`では、現在実行中のUART TXタスクと、イベントフラグにより起床したUART RXタスクを次のように確認できました。
+
+```text
+cur_task->itskpri  = 6   // UART TX task
+sche_task->itskpri = 4   // UART RX task
+```
+
+UART RXタスクの方が高優先度であるため、`scheduler()`から`dispatch()`が呼び出されます。
+
+本プロジェクトの`dispatch()`は直接コンテキストスイッチを行わず、SCBのICSRへ`ICSR_PENDSVSET`を書き込み、PendSVをpending状態にします。
+
+```c
+static inline void dispatch(void)
+{
+    out_w(SCB_ICSR, ICSR_PENDSVSET);
+}
+```
+
+`dispatch()`実行直後にGDBでxPSRを確認すると、次の値でした。
+
+```text
+xPSR = 0x81000024
+```
+
+下位のException Numberは`0x24 = 36`であり、UART0 IRQ（`16 + IRQ20`）を実行中であることが分かります。
+
+さらに`scheduler()`から`tk_set_flg()`へ戻った後も、
+
+```text
+xPSR = 0x81000024
+```
+
+となっており、UART0割り込みコンテキストのままでした。
+
+続いて、
+
+```text
+tk_set_flg()
+    ↓
+uart_rx_notify_from_isr()
+    ↓
+uart0_irq_handler()
+```
+
+と処理を戻り、`uart0_irq_handler()`の最終行でも、
+
+```text
+xPSR = 0x61000024
+```
+
+となっていました。
+
+このことから、PendSVを要求した後もUART0割り込み処理は最後まで実行されていることを確認できました。
+
+UART0割り込み終了後に実行を継続すると、PendSVハンドラである`dispatch_entry()`へ入りました。
+
+```text
+Breakpoint, dispatch_entry()
+```
+
+このときのxPSRは、
+
+```text
+xPSR = 0x4100000e
+```
+
+であり、下位のException Numberは`0x0e = 14`、すなわちPendSVでした。
+
+また、`dispatch_entry()`突入時は次の状態でした。
+
+```text
+cur_task->itskpri  = 6   // UART TX task
+sche_task->itskpri = 4   // UART RX task
+```
+
+以上から、実際の処理順序は次のようになることを確認しました。
+
+```text
+UART0 IRQ
+    ↓
+tk_set_flg()
+    ↓
+UART RX task
+WAIT → READY
+    ↓
+scheduler()
+    ↓
+sche_task = UART RX task
+    ↓
+dispatch()
+    ↓
+PendSVをpending
+    ↓
+scheduler()から復帰
+    ↓
+tk_set_flg()から復帰
+    ↓
+uart_rx_notify_from_isr()から復帰
+    ↓
+uart0_irq_handler()終了
+    ↓
+PendSV
+    ↓
+dispatch_entry()
+    ↓
+UART RX taskへコンテキスト切り替え
+```
+
+これにより、本プロジェクトではUART割り込みハンドラ内で直接コンテキストスイッチを行うのではなく、PendSVを使用して割り込み処理完了後にタスク切り替えを行う、遅延ディスパッチになっていることを実機で確認できました。
 
 ### UART受信タスク起床処理のGDB確認
 
@@ -1143,11 +1278,141 @@ disp_running = 0
 ```
 
 
+
+## `tk_set_flg()`のスケジューラ呼び出し最適化
+
+`tk_set_flg()`では、イベントフラグ待ちのタスクをWAITキューからREADYキューへ移動した後、`scheduler()`を実行します。
+
+従来の実装では、`scheduler()`が待ちタスクを処理する`for`ループ内にありました。
+
+```c
+for (tcb = wait_queue; tcb != NULL; tcb = next) {
+    ...
+    tqueue_add_entry(
+        &ready_queue[PRI_INDEX(tcb->itskpri)],
+        tcb
+    );
+
+    scheduler();
+    ...
+}
+```
+
+この構造では、1回の`tk_set_flg()`で複数タスクの待ち条件が成立すると、待ち解除したタスクごとに`scheduler()`が実行されます。
+
+この動作を確認するため、テスト用に2つのタスクを用意し、同じイベントフラグのBit0を`TWF_ORW`で待たせました。
+
+```text
+FlagTest A
+priority = 7
+    ┐
+    ├─ 同じイベントフラグBit0を待つ
+    │
+FlagTest B
+priority = 9
+    ┘
+```
+
+`TWF_BITCLR`は指定せず、1つ目のタスクが待ち解除されてもイベントフラグがクリアされない条件としました。
+
+`tk_set_flg()`を1回だけ実行したところ、変更前はGDBで次の2回の`scheduler()`呼び出しを確認しました。
+
+```text
+1回目:
+tcb->itskpri = 7
+tcb->state   = TS_READY
+
+2回目:
+tcb->itskpri = 9
+tcb->state   = TS_READY
+```
+
+処理の流れは次のようになります。
+
+```text
+tk_set_flg() 1回
+    ↓
+FlagTest A
+WAIT → READY
+    ↓
+scheduler() 1回目
+    ↓
+FlagTest B
+WAIT → READY
+    ↓
+scheduler() 2回目
+```
+
+実際のディスパッチはPendSVによって遅延されますが、スケジューリング自体は各待ち解除時に実行されるため、同一サービスコール内でREADYキューの探索が重複していました。
+
+そこで、READY状態になったタスクが存在したことを`need_schedule`で記録し、すべての待ちタスクを処理した後に`scheduler()`を1回だけ実行するよう変更しました。
+
+```c
+BOOL need_schedule = FALSE;
+
+for (tcb = wait_queue; tcb != NULL; tcb = next) {
+    ...
+    tqueue_add_entry(
+        &ready_queue[PRI_INDEX(tcb->itskpri)],
+        tcb
+    );
+
+    need_schedule = TRUE;
+
+    ...
+}
+
+if (need_schedule) {
+    scheduler();
+}
+```
+
+変更後に同じテストを実行したところ、`scheduler()`直前で2つのテストタスクがともにREADY状態になっていることを確認しました。
+
+```text
+FlagTest A = TS_READY
+FlagTest B = TS_READY
+```
+
+その後`scheduler()`は1回だけ実行され、`continue`しても同じテスト用`tk_set_flg()`では再度ブレークしませんでした。
+
+したがって、変更前後の動作は次のように整理できます。
+
+```text
+変更前:
+FlagTest A READY
+    ↓
+scheduler()
+    ↓
+FlagTest B READY
+    ↓
+scheduler()
+
+変更後:
+FlagTest A READY
+    ↓
+FlagTest B READY
+    ↓
+scheduler()
+```
+
+この変更により、1回の`tk_set_flg()`で複数タスクを待ち解除する場合でも、READYキューの更新を完了してから`scheduler()`を1回だけ実行するようになりました。
+
+なお、今回のテスト用`tk_set_flg()`は初期タスクの`usermain()`内から実行したため、`scheduler()`実行後は優先度1の初期タスクが引き続き`sche_task`として選択されました。
+
+```text
+cur_task->itskpri  = 1
+sche_task->itskpri = 1
+```
+
+これは、スケジューラが今回READYになったタスクだけではなく、READYキュー全体から最も高優先度のタスクを選択しているためです。
+
 ## 今後の予定
 
 - CR、LF、CRLFすべてへの対応
 - UARTエラー情報と統計表示の拡充
-- `tk_set_flg()`、`tk_sig_sem()`、`tk_wup_tsk()`など待ち解除側APIの割り込みコンテキストでの利用条件整理
+- `tk_sig_sem()`、`tk_wup_tsk()`など、他の待ち解除側APIでもスケジューラ呼び出しタイミングを確認
+- 割り込みコンテキストで複数サービスコールを実行した場合のスケジューリング動作を確認
 - UART受信割り込み処理の改善
 - GDBを使ったREADYキュー、WAITキュー、タスク状態、例外処理の確認
 - TryKernel内部の理解を進めながら、必要な機能を段階的に追加

@@ -20,7 +20,94 @@
 #define STACK_UARTTX    1024
 #define STACK_LOG_A     1024
 #define STACK_LOG_B     1024
+/*
+ * tk_set_flg() scheduler呼び出し確認用
+ */
+#define ENABLE_FLGTEST 0
 
+#if ENABLE_FLGTEST
+#define PRIORITY_FLGTEST_A   7
+#define PRIORITY_FLGTEST_B   9
+
+#define STACK_FLGTEST_A   1024
+#define STACK_FLGTEST_B   1024
+UW tskstk_flgtest_a[STACK_FLGTEST_A / sizeof(UW)];
+UW tskstk_flgtest_b[STACK_FLGTEST_B / sizeof(UW)];
+
+ID tskid_flgtest_a;
+ID tskid_flgtest_b;
+
+extern void task_flgtest_a(INT stacd, void *exinf);
+extern void task_flgtest_b(INT stacd, void *exinf);
+
+T_CTSK ctsk_flgtest_a = {
+    .tskatr  = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task    = task_flgtest_a,
+    .itskpri = PRIORITY_FLGTEST_A,
+    .stksz   = STACK_FLGTEST_A,
+    .bufptr  = tskstk_flgtest_a,
+};
+
+T_CTSK ctsk_flgtest_b = {
+    .tskatr  = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task    = task_flgtest_b,
+    .itskpri = PRIORITY_FLGTEST_B,
+    .stksz   = STACK_FLGTEST_B,
+    .bufptr  = tskstk_flgtest_b,
+};
+/* テスト用イベントフラグ */
+ID flgtest_id;
+
+void task_flgtest_a(INT stacd, void *exinf)
+{
+    (void)stacd;
+    (void)exinf;
+    UINT flgptn;
+
+    tk_wai_flg(
+        flgtest_id,
+        1U,
+        TWF_ORW,       // 複数タスクを起床させるためTWF_BITCLRは指定しない
+        &flgptn,
+        TMO_FEVR
+    );
+
+    while(1) {
+        tk_dly_tsk(1000);
+    }
+}
+void task_flgtest_b(INT stacd, void *exinf)
+{
+    (void)stacd;
+    (void)exinf;
+    UINT flgptn;
+
+    tk_wai_flg(
+        flgtest_id,
+        1U,
+        TWF_ORW,       // 複数タスクを起床させるためTWF_BITCLRは指定しない
+        &flgptn,
+        TMO_FEVR
+    );
+
+    while(1) {
+        tk_dly_tsk(1000);
+    }
+}
+static int create_flag(void)
+{
+    T_CFLG cflg;
+    cflg.flgatr = TA_TFIFO;
+    cflg.iflgptn = 0U;
+
+    flgtest_id = tk_cre_flg(&cflg);
+    if(flgtest_id < E_OK){
+        return (int)flgtest_id;
+    }
+    return 0;
+}
+#endif // ENABLE_FLGTEST
+/* ------------------------------------------------------------ */
  /*
  * LED制御タスク1生成情報
  */
@@ -89,6 +176,11 @@ int usermain(void)
     ER ercd;
     led25_init();   // PicoボードのLED初期化
 
+#if ENABLE_FLGTEST
+    if(create_flag() < E_OK){
+        return -1;
+    }
+#endif // ENABLE_FLGTEST
     /*
      * UART 送信排他制御用セマフォの生成
      */
@@ -142,5 +234,21 @@ int usermain(void)
     }
     tk_sta_tsk(tskid_uartlog_b, 0);
 
+#if ENABLE_FLGTEST
+    tskid_flgtest_a = tk_cre_tsk(&ctsk_flgtest_a);
+    if(tskid_flgtest_a < E_OK){
+        return (int)tskid_flgtest_a;
+    }
+    tk_sta_tsk(tskid_flgtest_a, 0);
+
+    tskid_flgtest_b = tk_cre_tsk(&ctsk_flgtest_b);
+    if(tskid_flgtest_b < E_OK){
+        return (int)tskid_flgtest_b;
+    }
+    tk_sta_tsk(tskid_flgtest_b, 0);
+
+    tk_dly_tsk(200);
+    tk_set_flg(flgtest_id, 1U); // イベントフラグをセットする
+#endif // ENABLE_FLGTEST
     return 0;
 }

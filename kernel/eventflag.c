@@ -45,6 +45,7 @@ ER tk_set_flg( ID flgid, UINT setptn )
     TCB     *tcb, *next;
     ER      err = E_OK;
     UINT    intsts;
+    BOOL    need_schedule = FALSE;
 
     if(flgid <= 0 || flgid > CNF_MAX_FLGID) return E_ID;
 
@@ -62,7 +63,9 @@ ER tk_set_flg( ID flgid, UINT setptn )
                     tcb->waifct	= TWFCT_NON;
                     *tcb->p_flgptn = flgcb->flgptn;
                     tqueue_add_entry( &ready_queue[PRI_INDEX(tcb->itskpri)], tcb);     // タスクをレディキューへつなぐ
-                    scheduler();                                            // スケジューラを実行
+
+                    /* READYタスクが発生したことを記憶 */
+                    need_schedule = TRUE;
 
                     if ((tcb->wfmode & TWF_BITCLR) != 0 ) {
                         if ( (flgcb->flgptn &= ~(tcb->waiptn)) == 0 ) {     // 対象フラグのクリア
@@ -75,6 +78,10 @@ ER tk_set_flg( ID flgid, UINT setptn )
                     }
                 }
             }
+        }
+        if(need_schedule) {
+            /* 待ちタスクの処理完了後、スケジューラを１回だけ実行 */
+            scheduler();    // スケジューラを実行
         }
     } else {
         err = E_NOEXS;
