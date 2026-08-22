@@ -411,6 +411,8 @@ UART TX queue: OK
 UART TX overflow count: 0
 UART RX overflow count: 0
 UART RX HW overrun count: 0
+UART RX IRQ count: 0
+UART RX timeout IRQ count: 8
 > led blink
 led blink
 > echo abcdef
@@ -454,17 +456,23 @@ test: abc Z -123 456 1a2b3c %
 └── Makefile
 ```
 
-## UARTエラー情報
+## UART状態・エラー情報
 
-`status`コマンドでは、次のUARTエラー情報を確認できます。
+`status`コマンドでは、UARTの割込み回数とエラー情報を確認できます。
 
 | 表示 | 内容 |
-|---|---|
-| `UART TX overflow count` | 送信キューへ登録できなかった回数 |
-| `UART RX overflow count` | 受信リングバッファへ格納できなかった回数 |
-| `UART RX HW overrun count` | UART RX FIFOのオーバーランを検出した回数 |
+| ---------------------------- | ----------------------------------------- |
+| `UART TX overflow count`     | 送信キューへ登録できなかった回数            |
+| `UART RX overflow count`     | 受信リングバッファへ格納できなかった回数     |
+| `UART RX HW overrun count`   | UART RX FIFOのオーバーランを検出した回数     |
+| `UART RX IRQ count`          | RX FIFOが受信しきい値に達した割込み回数      |
+| `UART RX timeout IRQ count`  | 受信タイムアウト割込みが発生した回数          |
 
 `UART RX HW overrun count`は、オーバーランを検出した回数です。失われた正確な文字数ではありません。
+
+`UART RX IRQ count`と`UART RX timeout IRQ count`は、受信文字数ではなく割込みの発生回数です。1回の割込みで、RX FIFO内の複数文字を読み出す場合があります。
+
+少量または間隔の空いた入力は主に受信タイムアウト割込みで処理され、連続入力ではRX FIFO割込みが発生します。どちらの場合も、割込みハンドラはRX FIFOを空になるまで読み出し、受信リングバッファへ格納します。
 
 ## 実装上の制約
 

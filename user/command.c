@@ -102,6 +102,8 @@ static void cmd_status(int argc, char *argv[]){
     uart_tx_printf("UART TX overflow count: %u\r\n", (UINT)overflow_count);
     uart_tx_printf("UART RX overflow count: %u\r\n", (UINT)uart_rx_overflow_count());
     uart_tx_printf("UART RX HW overrun count: %u\r\n", (UINT)uart_rx_hw_overrun_count());
+    uart_tx_printf("UART RX IRQ count: %u\r\n", (UINT)uart_rx_irq_count_get());
+    uart_tx_printf("UART RX timeout IRQ count: %u\r\n", (UINT)uart_rt_irq_count_get());
 }
 /*
  * コマンド:Echo (Echo 表示)

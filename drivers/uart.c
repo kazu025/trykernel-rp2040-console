@@ -21,10 +21,20 @@ static volatile UW uart_rx_overflow = 0;
 static volatile UW uart_rx_hw_overrun;
 static volatile UB uart_rx_buf[UART_RX_BUF_SIZE];
 static UART_RX_NOTIFY_FUNC uart_rx_notify;
-
+static volatile UW uart_rx_irq_count;
+static volatile UW uart_rt_irq_count;
 /* ---------------------------------------------------------- */
 /* static func */
 static int uart_rxbuf_put(UB data);
+/*
+ * 割り込みカウンタ更新
+ */
+UW uart_rx_irq_count_get(void){
+    return uart_rx_irq_count;
+}
+UW uart_rt_irq_count_get(void){
+    return uart_rt_irq_count;
+}
 /*
  * UART初期化
  */
@@ -42,6 +52,8 @@ void uart_rxbuf_init(void){
     uart_rx_tail = 0;
     uart_rx_overflow = 0;
     uart_rx_hw_overrun = 0;
+    uart_rx_irq_count = 0;
+    uart_rt_irq_count = 0;
 }
 /*
  * UART0受信割り込みを有効化
@@ -170,10 +182,12 @@ void uart0_irq_handler(void){
         }
     }
     if((mis & UART_MIS_RXMIS) != 0U){
+        uart_rx_irq_count++;
         /* RX FIFO 割り込み要因クリア */
         clear |= UART_ICR_RXIC;
     }
     if((mis & UART_MIS_RTMIS) != 0U){
+        uart_rt_irq_count++;
         /* 受信タイムアウト割り込み要因クリア */
         clear |= UART_ICR_RTIC;
     }
