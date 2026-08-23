@@ -8,6 +8,11 @@ build/
 *.lst
 *.d
 
-#VScode local settings
+# VS Code local settings
 .vscode/
 
+# Doxygen generated files
+/docs/doxygen/
+
+# Generated repository tree
+/repository-tree.txt
