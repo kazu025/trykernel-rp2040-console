@@ -66,8 +66,11 @@ C_SRCS  := \
 	user/uart_sync.c \
 	user/task_uarttx.c \
 	user/uart_tx.c	\
-	user/mini_printf.c
-
+	user/mini_printf.c \
+	drivers/gpio.c \
+	drivers/adt7410.c \
+	drivers/i2c.c \
+	drivers/uart.c
 #	kernel/syslib.c \
 
 S_SRCS := \

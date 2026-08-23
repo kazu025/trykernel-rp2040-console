@@ -5,6 +5,8 @@
 #include "uart.h"
 #include "gpio.h"
 #include "i2c.h"
+#include "adt7410.h"
+
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
 #define CMD_OUTPUT_BUF_SIZE 128U
@@ -15,6 +17,7 @@ static void cmd_led(int argc, char *argv[]);
 static void cmd_print(int argc, char *argv[]);
 static int split_args(char *line, char *argv[], int max_args);
 static void cmd_i2cscan(int argc, char *argv[]);
+static void cmd_temperature(int argc, char *argv[]);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
 typedef struct {
@@ -29,7 +32,8 @@ static const command_t command_table[] = {
     {"echo",    cmd_echo,  "echo arguments"},
     {"led",     cmd_led,    "led on/off/blink"},
     {"print",   cmd_print,  "print test"},
-    {"i2cscan", cmd_i2cscan, "scan I2C devices"}
+    {"i2cscan", cmd_i2cscan, "scan I2C devices"},
+    {"temperature", cmd_temperature, "read temperature from ADT7410 sensor"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -177,4 +181,55 @@ static void cmd_i2cscan(int argc, char* argv[]){
         }
     }
     uart_tx_printf("I2C scan complete. Found %u device(s).\r\n", (UINT)found);
+}
+static void cmd_temperature(int argc, char *argv[])
+{
+    INT temperature_milli_c;
+    UINT magnitude;
+    UINT integer_part;
+    UINT fractional_part;
+    const char *sign;
+
+    (void)argc;
+    (void)argv;
+
+    if(adt7410_read_temperature(
+            &temperature_milli_c) == FALSE){
+        uart_tx_send("ADT7410 read error\r\n");
+        return;
+    }
+
+    if(temperature_milli_c < 0){
+        sign = "-";
+        magnitude = (UINT)(-temperature_milli_c);
+    }else{
+        sign = "";
+        magnitude = (UINT)temperature_milli_c;
+    }
+
+    integer_part = magnitude / 1000U;
+    fractional_part = magnitude % 1000U;
+
+    if(fractional_part < 10U){
+        uart_tx_printf(
+            "ADT7410 temperature: %s%u.00%u C\r\n",
+            sign,
+            integer_part,
+            fractional_part
+        );
+    }else if(fractional_part < 100U){
+        uart_tx_printf(
+            "ADT7410 temperature: %s%u.0%u C\r\n",
+            sign,
+            integer_part,
+            fractional_part
+        );
+    }else{
+        uart_tx_printf(
+            "ADT7410 temperature: %s%u.%u C\r\n",
+            sign,
+            integer_part,
+            fractional_part
+        );
+    }
 }

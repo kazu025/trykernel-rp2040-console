@@ -70,6 +70,8 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - I2C0のレジスタレベル・ドライバ
 - GPIO4／GPIO5を使用したI2C通信
 - I2Cデバイス検索コマンド
+- ADT7410温度センサードライバ
+- ADT7410温度取得コマンド
 
 ## UARTの構成
 
@@ -322,6 +324,28 @@ ACK／NACKを確認
 ```
 書き込み専用など、ダミー読み出しに応答しないデバイスは検出できない場合があります。
 
+### ADT7410温度取得
+
+`temperature`コマンドは、I2Cアドレス`0x48`のADT7410から温度レジスタを読み出します。
+
+ADT7410はデフォルトの13ビットモードで使用しています。温度分解能は`0.0625℃`です。温度データは16ビットの2の補数形式で格納されますが、13ビットモードでは下位3ビットが`TCRIT`、`THIGH`、`TLOW`の状態フラグになるため、温度変換時に除外しています。
+
+浮動小数点演算は使用せず、温度をミリ℃単位の整数へ変換しています。変換結果は小数第3位まで表示します。
+
+```text
+温度レジスタのアドレス0x00を書き込み
+    ↓
+Repeated START
+    ↓
+温度データを2バイト読み出し
+    ↓
+下位3ビットの状態フラグを除外
+    ↓
+2の補数を符号付き整数へ変換
+    ↓
+ミリ℃単位へ変換して表示
+```
+
 ## 必要な環境
 
 Linux MintまたはUbuntu系Linuxを想定しています。
@@ -430,6 +454,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `led blink` | LEDを点滅 |
 | `print` | `mini_printf()`の書式テスト |
 | `i2cscan` | I2Cバスに接続されたデバイスを検索 |
+| `temperature` | ADT7410から温度を取得 |
 
 ## 動作例
 
@@ -450,6 +475,7 @@ commands:
    led -  led on/off/blink
    print -  print test
    i2cscan -  scan I2C devices
+   temperature -  read temperature from ADT7410 sensor
 > status
 TryKernel status: running
 LED mode: OFF
@@ -469,9 +495,13 @@ test: abc Z -123 456 1a2b3c %
 Scanning I2C bus...
 Found device at 0x48
 I2C scan complete. Found 1 device(s).
+> temperature
+ADT7410 temperature: 25.250 C
+> temperature
+ADT7410 temperature: 25.313 C
 ```
 
-上記の例では、I2Cアドレス`0x48`のADT7410を検出しています。
+上記の例では、I2Cアドレス`0x48`のADT7410を検出し、温度を取得しています。ADT7410の13ビットモードの分解能は`0.0625℃`であるため、表示値は約`0.063℃`単位で変化します。
 
 起動時に次のように表示される場合があります。
 
@@ -543,6 +573,8 @@ I2C scan complete. Found 1 device(s).
 - I2CはI2C0、GPIO4／GPIO5、100kHz固定です。
 - `i2cscan`は7ビットアドレスだけに対応しています。
 - 現在、I2Cバスのタスク間排他制御は実装していません。
+- ADT7410はI2Cアドレス`0x48`、デフォルト13ビットモードで使用しています。
+- `temperature`コマンドは浮動小数点演算を使用せず、ミリ℃単位の整数で温度を処理します。
 
 ## 原典からの変更について
 
@@ -1483,7 +1515,6 @@ sche_task->itskpri = 1
 - UART受信割り込み処理の改善
 - GDBを使ったREADYキュー、WAITキュー、タスク状態、例外処理の確認
 - TryKernel内部の理解を進めながら、必要な機能を段階的に追加
-- ADT7410の温度読み出し
 - I2Cバスのタスク間排他制御
 - I2Cセンサータスクの追加
 
@@ -1492,6 +1523,7 @@ sche_task->itskpri = 1
 - [Interface 2023年7月号「ラズパイPicoで1500行 ゼロから作るOS」](https://interface.cqpub.co.jp/magazine/202307/)
 - [RP2040 Datasheet（Raspberry Pi公式）](https://pip.raspberrypi.com/documents/RP-008371-DS-rp2040-datasheet.pdf)
 - [Raspberry Pi Pico SDK I2C bus scan example](https://github.com/raspberrypi/pico-examples/blob/master/i2c/bus_scan/bus_scan.c)
+- [ADT7410 Data Sheet（Analog Devices公式）](https://www.analog.com/media/en/technical-documentation/data-sheets/ADT7410.pdf)
 
 ## ライセンスと原典について
 
