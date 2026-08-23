@@ -1506,6 +1506,16 @@ sche_task->itskpri = 1
 
 これは、スケジューラが今回READYになったタスクだけではなく、READYキュー全体から最も高優先度のタスクを選択しているためです。
 
+## Doxygenドキュメント
+
+DoxygenとGraphvizを使用して、ソースファイル、関数、インクルード依存関係を確認できます。
+
+```bash
+sudo apt install doxygen graphviz
+doxygen Doxyfile
+xdg-open docs/doxygen/html/index.html
+```
+
 ## 今後の予定
 
 - CR、LF、CRLFすべてへの対応
