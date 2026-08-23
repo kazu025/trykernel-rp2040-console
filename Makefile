@@ -55,6 +55,7 @@ C_SRCS  := \
 	kernel/task_queue.c \
 	kernel/task_sync.c \
 	drivers/gpio.c \
+	drivers/i2c.c \
 	drivers/uart.c \
 	user/task_led.c	\
 	user/task_uartrx.c \

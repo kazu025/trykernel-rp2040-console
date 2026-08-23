@@ -146,6 +146,49 @@
 #define UART_ICR_RTIC           (1<<6)  // Receive timeout interrupt clear
 #define UART_ICR_OEIC           (1<<10) // Overrun error interrupt clear
 
+/* I2C */
+#define I2C0_BASE                  0x40044000
+#define I2C1_BASE                  0x40048000
+
+#define I2Cx_CON                   0x000 // マスター、通信速度などの動作設定
+#define I2Cx_TAR                   0x004 // 通信相手の7ビットアドレス
+#define I2Cx_DATA_CMD              0x010 // 送受信データと読み書き命令
+#define I2Cx_FS_SCL_HCNT           0x01C // Fast mode時のSCL High期間
+#define I2Cx_FS_SCL_LCNT           0x020 // Fast mode時のSCL Low期間
+#define I2Cx_INTR_MASK             0x030 // 割込みマスク
+#define I2Cx_RAW_INTR_STAT         0x034 // マスク前の割込み状態
+#define I2Cx_RX_TL                 0x038 // 受信FIFO割込みのしきい値
+#define I2Cx_TX_TL                 0x03C // 送信FIFO割込みのしきい値
+#define I2Cx_CLR_INTR              0x040 // 全割込みのクリア（読み出しでクリア）
+#define I2Cx_CLR_TX_ABRT           0x054 // 送信中断割込みのクリア（読み出しでクリア）
+#define I2Cx_CLR_STOP_DET          0x060 // STOP検出割込みのクリア（読み出しでクリア）
+#define I2Cx_ENABLE                0x06C // I2Cコントローラの有効／無効設定
+#define I2Cx_STATUS                0x070 // I2Cコントローラの動作状態
+#define I2Cx_TXFLR                 0x074 // 送信FIFO内のデータ数
+#define I2Cx_RXFLR                 0x078 // 受信FIFO内のデータ数
+#define I2Cx_SDA_HOLD              0x07C // SDAのホールド時間
+#define I2Cx_TX_ABRT_SOURCE        0x080 // 送信中断の原因
+#define I2Cx_ENABLE_STATUS         0x09C // I2Cコントローラの有効状態
+#define I2Cx_FS_SPKLEN             0x0A0 // Fast mode時のSCLノイズ除去幅
+
+/* IC_CON */
+#define I2C_CON_MASTER_MODE        (1U << 0) // マスターモード
+#define I2C_CON_SPEED_FAST         (2U << 1) // Fast mode設定
+#define I2C_CON_RESTART_EN         (1U << 5) // RESTART条件を有効化
+#define I2C_CON_SLAVE_DISABLE      (1U << 6) // スレーブ機能を無効化
+#define I2C_CON_TX_EMPTY_CTRL      (1U << 8) // 送信完了後にTX_EMPTYを通知
+
+/* IC_DATA_CMD */
+#define I2C_DATA_CMD_READ          (1U << 8) // 1:読み出し、0:書き込み
+#define I2C_DATA_CMD_STOP          (1U << 9) // 転送後にSTOP条件を生成
+
+/* IC_RAW_INTR_STAT */
+#define I2C_RAW_TX_ABRT            (1U << 6) // 送信中断
+#define I2C_RAW_STOP_DET           (1U << 9) // STOP条件検出
+
+/* IC_ENABLE / IC_ENABLE_STATUS */
+#define I2C_ENABLE_EN              (1U << 0) // I2Cコントローラ有効
+
 /* IOPORT レジスタ */
 #define SIO_BASE                0xD0000000
 #define	GPIO_IN                 (SIO_BASE+0x04)
