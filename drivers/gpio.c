@@ -84,3 +84,26 @@ void led25_off(void){
 void led25_toggle(void){
     gpio_toggle(PICO_LED_PIN);
 }
+/*
+ * GPIOにI2C機能を追加
+ */
+void gpio_init_i2c(unsigned int pin)
+{
+    UW pad;
+
+    if(!gpio_is_valid(pin)) return;
+
+    gpio_reset_release();
+
+    /* GPIOをI2C機能へ接続 */
+    out_w(GPIO_CTRL(pin), GPIO_CTRL_FUNCSEL_I2C);
+
+    /*
+     * 入力を有効化し、内部プルアップを有効化
+     * 出力禁止とプルダウンは解除
+     */
+    pad = in_w(GPIO(pin));
+    pad |= GPIO_IE | GPIO_PUE;
+    pad &= ~(GPIO_OD | GPIO_PDE);
+    out_w(GPIO(pin), pad);
+}

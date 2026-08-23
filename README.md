@@ -4,7 +4,7 @@ Raspberry Pi Pico（RP2040）上で動作する、学習用の小規模RTOSプ�
 
 CQ出版社『Interface』2023年7月号の特集「ラズパイPicoで1500行 ゼロから作るOS」に掲載された、シングルコア版の**Try Kernel**を基にしています。
 
-掲載版へGPIOドライバ、UARTコンソール、UART送受信バッファ、UART受信割り込み、タスク間同期などを追加し、RTOSとマイコンの内部動作を学習するために拡張しています。
+掲載版へGPIOドライバ、UARTコンソール、UART送受信バッファ、UART受信割り込み、I2Cドライバ、タスク間同期などを追加し、RTOSとマイコンの内部動作を学習するために拡張しています。
 
 Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 
@@ -28,6 +28,8 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - READYキュー更新後のスケジューリング動作
 - UART送受信バッファ
 - UARTコンソールとコマンド処理
+- RP2040のI2Cコントローラのレジスタ直接操作
+- I2Cバスに接続されたデバイスのアドレス検索
 
 ## 主な機能
 
@@ -65,6 +67,9 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - セマフォによる送信キューの保護
 - イベントフラグによる送信タスクの起床
 - 軽量な`mini_printf()`
+- I2C0のレジスタレベル・ドライバ
+- GPIO4／GPIO5を使用したI2C通信
+- I2Cデバイス検索コマンド
 
 ## UARTの構成
 
@@ -278,6 +283,45 @@ USB-UART変換器またはRaspberry Pi Debug ProbeのUART端子を使用する�
 
 信号レベルは3.3V TTLを使用してください。
 
+## I2C設定と接続
+
+I2C0を使用し、RP2040のレジスタを直接操作しています。
+
+| 項目 | 設定 |
+|---|---|
+| I2Cコントローラ | I2C0 |
+| SDA | GPIO4（物理ピン6） |
+| SCL | GPIO5（物理ピン7） |
+| 通信速度 | 100kHz |
+| アドレス形式 | 7ビット |
+| 転送方式 | ポーリング |
+
+接続例は次のとおりです。
+
+| Raspberry Pi Pico | I2Cデバイス |
+|---|---|
+| 3.3V | VCC |
+| GND | GND |
+| GPIO4 | SDA |
+| GPIO5 | SCL |
+
+GPIO4とGPIO5では内部プルアップを有効にしていますが、安定した通信には外部プルアップ抵抗を使用することを推奨します。市販のセンサーモジュールには、プルアップ抵抗が実装されている場合があります。
+
+`i2cscan`コマンドは、予約アドレスを除く`0x08`から`0x77`までを走査します。各アドレスに対して1バイトのダミー読み出しを行い、ACKが返されたアドレスを表示します。
+
+```text
+I2C0初期化
+    ↓
+ターゲットアドレスを設定
+    ↓
+1バイト読み出し要求
+    ↓
+ACK／NACKを確認
+    ↓
+次のアドレスへ
+```
+書き込み専用など、ダミー読み出しに応答しないデバイスは検出できない場合があります。
+
 ## 必要な環境
 
 Linux MintまたはUbuntu系Linuxを想定しています。
@@ -385,6 +429,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `led off` | LEDを消灯 |
 | `led blink` | LEDを点滅 |
 | `print` | `mini_printf()`の書式テスト |
+| `i2cscan` | I2Cバスに接続されたデバイスを検索 |
 
 ## 動作例
 
@@ -404,6 +449,7 @@ commands:
    echo -  echo arguments
    led -  led on/off/blink
    print -  print test
+   i2cscan -  scan I2C devices
 > status
 TryKernel status: running
 LED mode: OFF
@@ -419,7 +465,13 @@ led blink
 abcdef
 > print
 test: abc Z -123 456 1a2b3c %
+> i2cscan
+Scanning I2C bus...
+Found device at 0x48
+I2C scan complete. Found 1 device(s).
 ```
+
+上記の例では、I2Cアドレス`0x48`のADT7410を検出しています。
 
 起動時に次のように表示される場合があります。
 
@@ -448,7 +500,7 @@ test: abc Z -123 456 1a2b3c %
 ```text
 .
 ├── boot/       # boot2、リセットハンドラ、ベクタテーブル
-├── drivers/    # GPIO、UARTドライバ
+├── drivers/    # GPIO、UARTドライバ、I2Cドライバ
 ├── include/    # TryKernel API、型、レジスタ、設定定義
 ├── kernel/     # スケジューラ、タスク管理、同期機能
 ├── linker/     # RP2040用リンカスクリプト
@@ -487,6 +539,10 @@ test: abc Z -123 456 1a2b3c %
 - T-Kernel仕様への完全準拠を目的としていません。
 - 待ちを発生させるTryKernel APIは、割り込み・例外コンテキストから呼び出せません。
 - 割り込みからの`tk_set_flg()`は、本プロジェクトのTryKernel実装を前提としています。
+- I2C通信は現在ポーリング方式です。
+- I2CはI2C0、GPIO4／GPIO5、100kHz固定です。
+- `i2cscan`は7ビットアドレスだけに対応しています。
+- 現在、I2Cバスのタスク間排他制御は実装していません。
 
 ## 原典からの変更について
 
@@ -523,6 +579,9 @@ test: abc Z -123 456 1a2b3c %
 - UARTコンソールとコマンド処理
 - UART受信ハードウェア・オーバーランの検出・表示
 - 軽量な`mini_printf()`
+- I2C0ドライバ
+- GPIO4／GPIO5のI2C機能設定
+- I2Cデバイス検索コマンド
 
 ## UART受信割り込みの実装段階
 
@@ -1424,11 +1483,15 @@ sche_task->itskpri = 1
 - UART受信割り込み処理の改善
 - GDBを使ったREADYキュー、WAITキュー、タスク状態、例外処理の確認
 - TryKernel内部の理解を進めながら、必要な機能を段階的に追加
+- ADT7410の温度読み出し
+- I2Cバスのタスク間排他制御
+- I2Cセンサータスクの追加
 
 ## 参考資料
 
 - [Interface 2023年7月号「ラズパイPicoで1500行 ゼロから作るOS」](https://interface.cqpub.co.jp/magazine/202307/)
 - [RP2040 Datasheet（Raspberry Pi公式）](https://pip.raspberrypi.com/documents/RP-008371-DS-rp2040-datasheet.pdf)
+- [Raspberry Pi Pico SDK I2C bus scan example](https://github.com/raspberrypi/pico-examples/blob/master/i2c/bus_scan/bus_scan.c)
 
 ## ライセンスと原典について
 

@@ -3,6 +3,8 @@
 #include "command.h"
 #include "uart_tx.h"
 #include "uart.h"
+#include "gpio.h"
+#include "i2c.h"
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
 #define CMD_OUTPUT_BUF_SIZE 128U
@@ -12,6 +14,7 @@ static void cmd_echo(int argc, char *argv[]);
 static void cmd_led(int argc, char *argv[]);
 static void cmd_print(int argc, char *argv[]);
 static int split_args(char *line, char *argv[], int max_args);
+static void cmd_i2cscan(int argc, char *argv[]);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
 typedef struct {
@@ -25,7 +28,8 @@ static const command_t command_table[] = {
     {"status",  cmd_status, "show system status"},
     {"echo",    cmd_echo,  "echo arguments"},
     {"led",     cmd_led,    "led on/off/blink"},
-    {"print",   cmd_print,  "print test"}
+    {"print",   cmd_print,  "print test"},
+    {"i2cscan", cmd_i2cscan, "scan I2C devices"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -160,4 +164,17 @@ static void cmd_print(int argc, char* argv[]){
         "test: %s %c %d %u %x %%\r\n",
         "abc", 'Z', -123, 456U, 0x1a2b3cU
     );
+}
+static void cmd_i2cscan(int argc, char* argv[]){
+    UW found = 0U;
+    (void)argc;
+    (void)argv;
+    uart_tx_send("Scanning I2C bus...\r\n");
+    for(UB addr = 0x08; addr <= 0x77; addr++){
+        if(i2c0_probe(addr)){
+            uart_tx_printf("Found device at 0x%x\r\n", addr);
+            found++;
+        }
+    }
+    uart_tx_printf("I2C scan complete. Found %u device(s).\r\n", (UINT)found);
 }

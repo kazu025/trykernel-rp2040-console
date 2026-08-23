@@ -17,5 +17,7 @@ void led25_init(void);
 void led25_on(void);
 void led25_off(void);
 void led25_toggle(void);
+/* --- I2C --- */
+void gpio_init_i2c(unsigned int pin);
 /* -------------------- */
 #endif // RP2040_GPIO_H

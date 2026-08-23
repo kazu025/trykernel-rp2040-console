@@ -3,6 +3,8 @@
 #include "uart_sync.h"
 #include "uart_tx.h"
 #include "task_uartrx.h"
+#include "i2c.h"
+
 /*
  * タスク優先度:1〜16
  * 数字が小さいほど優先度が高い
@@ -175,7 +177,7 @@ int usermain(void)
 {
     ER ercd;
     led25_init();   // PicoボードのLED初期化
-
+    i2c0_init();   // I2C初期化
 #if ENABLE_FLGTEST
     if(create_flag() < E_OK){
         return -1;
