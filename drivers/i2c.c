@@ -125,6 +125,171 @@ void i2c0_init(void)
 
     (void)i2c0_set_enabled(TRUE);
 }
+/*
+ * 指定した割込み状態になるまで待つ
+ */
+static BOOL i2c0_wait_raw_status(UW mask)
+{
+    UW count;
+    UW raw_status;
+
+    for(count = 0; count < I2C0_TIMEOUT_LOOP; count++){
+        raw_status = in_w(
+            I2C0_BASE + I2Cx_RAW_INTR_STAT
+        );
+
+        if((raw_status & I2C_RAW_TX_ABRT) != 0U){
+            (void)in_w(
+                I2C0_BASE + I2Cx_CLR_TX_ABRT
+            );
+            return FALSE;
+        }
+
+        if((raw_status & mask) != 0U){
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+/*
+ * RX FIFOから1バイト受信するまで待つ
+ */
+static BOOL i2c0_wait_read_byte(UB *data)
+{
+    UW count;
+    UW raw_status;
+
+    if(data == NULL){
+        return FALSE;
+    }
+
+    for(count = 0; count < I2C0_TIMEOUT_LOOP; count++){
+        raw_status = in_w(
+            I2C0_BASE + I2Cx_RAW_INTR_STAT
+        );
+
+        if((raw_status & I2C_RAW_TX_ABRT) != 0U){
+            (void)in_w(
+                I2C0_BASE + I2Cx_CLR_TX_ABRT
+            );
+            return FALSE;
+        }
+
+        if(in_w(I2C0_BASE + I2Cx_RXFLR) != 0U){
+            *data = (UB)(
+                in_w(I2C0_BASE + I2Cx_DATA_CMD) & 0xFFU
+            );
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+/*
+ * レジスタ番号などを書き込んだ後、
+ * Repeated STARTでデータを読み出す
+ */
+BOOL i2c0_write_read(
+    UB addr,
+    const UB *write_data,
+    UINT write_size,
+    UB *read_data,
+    UINT read_size
+)
+{
+    UINT i;
+    UW command;
+    BOOL result = FALSE;
+
+    if((addr < 0x08U) || (addr > 0x77U)){
+        return FALSE;
+    }
+
+    if((write_data == NULL) || (write_size == 0U)){
+        return FALSE;
+    }
+
+    if((read_data == NULL) || (read_size == 0U)){
+        return FALSE;
+    }
+
+    if(i2c0_set_enabled(FALSE) == FALSE){
+        return FALSE;
+    }
+
+    /* 前回の割込み状態をクリア */
+    (void)in_w(I2C0_BASE + I2Cx_CLR_INTR);
+
+    /* 通信相手を設定 */
+    out_w(I2C0_BASE + I2Cx_TAR, (UW)addr);
+
+    if(i2c0_set_enabled(TRUE) == FALSE){
+        return FALSE;
+    }
+
+    /*
+     * レジスタ番号などを書き込む。
+     * 読み出しへ続くためSTOPは生成しない。
+     */
+    for(i = 0U; i < write_size; i++){
+        out_w(
+            I2C0_BASE + I2Cx_DATA_CMD,
+            (UW)write_data[i]
+        );
+
+        if(i2c0_wait_raw_status(
+                I2C_RAW_TX_EMPTY) == FALSE){
+            goto cleanup;
+        }
+    }
+
+    /*
+     * 最初の読み出しでRepeated START、
+     * 最後の読み出しでSTOPを生成する。
+     */
+    for(i = 0U; i < read_size; i++){
+        command = I2C_DATA_CMD_READ;
+
+        if(i == 0U){
+            command |= I2C_DATA_CMD_RESTART;
+        }
+
+        if(i == (read_size - 1U)){
+            command |= I2C_DATA_CMD_STOP;
+        }
+
+        out_w(
+            I2C0_BASE + I2Cx_DATA_CMD,
+            command
+        );
+
+        if(i2c0_wait_read_byte(
+                &read_data[i]) == FALSE){
+            goto cleanup;
+        }
+    }
+
+    if(i2c0_wait_raw_status(
+            I2C_RAW_STOP_DET) == FALSE){
+        goto cleanup;
+    }
+
+    (void)in_w(
+        I2C0_BASE + I2Cx_CLR_STOP_DET
+    );
+
+    result = TRUE;
+
+cleanup:
+    /* 残っている割込み状態をクリア */
+    (void)in_w(I2C0_BASE + I2Cx_CLR_INTR);
+    (void)i2c0_set_enabled(FALSE);
+
+    return result;
+}
 
 /*
  * 指定した7ビットアドレスから

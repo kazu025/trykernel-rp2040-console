@@ -9,4 +9,12 @@
 void i2c0_init(void);
 BOOL i2c0_probe(UB addr);
 
+BOOL i2c0_write_read(
+    UB addr,
+    const UB *write_data,
+    UINT write_size,
+    UB *read_data,
+    UINT read_size
+);
+
 #endif /* RP2040_I2C_H */

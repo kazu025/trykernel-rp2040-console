@@ -179,12 +179,14 @@
 #define I2C_CON_TX_EMPTY_CTRL      (1U << 8) // 送信完了後にTX_EMPTYを通知
 
 /* IC_DATA_CMD */
-#define I2C_DATA_CMD_READ          (1U << 8) // 1:読み出し、0:書き込み
-#define I2C_DATA_CMD_STOP          (1U << 9) // 転送後にSTOP条件を生成
+#define I2C_DATA_CMD_READ          (1U << 8)  // 1:読み出し、0:書き込み
+#define I2C_DATA_CMD_STOP          (1U << 9)  // 転送後にSTOP条件を生成
+#define I2C_DATA_CMD_RESTART       (1U << 10) // 転送前にRESTART条件を生成
 
 /* IC_RAW_INTR_STAT */
-#define I2C_RAW_TX_ABRT            (1U << 6) // 送信中断
-#define I2C_RAW_STOP_DET           (1U << 9) // STOP条件検出
+#define I2C_RAW_TX_EMPTY           (1U << 4)  // 送信FIFOが空
+#define I2C_RAW_TX_ABRT            (1U << 6)  // 送信中断
+#define I2C_RAW_STOP_DET           (1U << 9)  // STOP条件検出
 
 /* IC_ENABLE / IC_ENABLE_STATUS */
 #define I2C_ENABLE_EN              (1U << 0) // I2Cコントローラ有効
