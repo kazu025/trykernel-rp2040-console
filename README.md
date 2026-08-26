@@ -346,6 +346,12 @@ Repeated START
 ミリ℃単位へ変換して表示
 ```
 
+### ADT7410診断情報
+
+`adtinfo`コマンドは、ADT7410のIDレジスタ`0x0B`と設定レジスタ`0x03`を読み出します。IDの生値、メーカーID、リビジョンID、温度分解能、動作モードを表示します。
+
+電源投入時のデフォルト設定では、温度分解能は13ビット、動作モードは連続変換です。
+
 ## 必要な環境
 
 Linux MintまたはUbuntu系Linuxを想定しています。
@@ -455,6 +461,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `print` | `mini_printf()`の書式テスト |
 | `i2cscan` | I2Cバスに接続されたデバイスを検索 |
 | `temperature` | ADT7410から温度を取得 |
+| `adtinfo` | ADT7410のIDと設定を表示 |
 
 ## 動作例
 
@@ -476,6 +483,7 @@ commands:
    print -  print test
    i2cscan -  scan I2C devices
    temperature -  read temperature from ADT7410 sensor
+   adtinfo -  show ADT7410 ID and configuration
 > status
 TryKernel status: running
 LED mode: OFF

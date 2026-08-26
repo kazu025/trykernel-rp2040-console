@@ -18,6 +18,7 @@ static void cmd_print(int argc, char *argv[]);
 static int split_args(char *line, char *argv[], int max_args);
 static void cmd_i2cscan(int argc, char *argv[]);
 static void cmd_temperature(int argc, char *argv[]);
+static void cmd_adtinfo(int argc, char *argv[]);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
 typedef struct {
@@ -33,7 +34,8 @@ static const command_t command_table[] = {
     {"led",     cmd_led,    "led on/off/blink"},
     {"print",   cmd_print,  "print test"},
     {"i2cscan", cmd_i2cscan, "scan I2C devices"},
-    {"temperature", cmd_temperature, "read temperature from ADT7410 sensor"}
+    {"temperature", cmd_temperature, "read temperature from ADT7410 sensor"},
+    {"adtinfo", cmd_adtinfo, "show ADT7410 ID and configuration"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -232,4 +234,55 @@ static void cmd_temperature(int argc, char *argv[])
             fractional_part
         );
     }
+}
+
+static void cmd_adtinfo(int argc, char *argv[])
+{
+    UB device_id;
+    UB configuration;
+    UB operation_mode;
+    const char *operation_mode_name;
+
+    (void)argc;
+    (void)argv;
+
+    if(adt7410_read_device_info(
+            &device_id,
+            &configuration) == FALSE){
+        uart_tx_send("ADT7410 diagnostic read error\r\n");
+        return;
+    }
+
+    operation_mode = (configuration >> 5) & 0x03U;
+    if(operation_mode == 0U){
+        operation_mode_name = "continuous";
+    }else if(operation_mode == 1U){
+        operation_mode_name = "one shot";
+    }else if(operation_mode == 2U){
+        operation_mode_name = "1 SPS";
+    }else{
+        operation_mode_name = "shutdown";
+    }
+
+    uart_tx_printf("ADT7410 ID: 0x%x\r\n", (UINT)device_id);
+    uart_tx_printf(
+        "  manufacturer ID: 0x%x\r\n",
+        (UINT)(device_id >> 3)
+    );
+    uart_tx_printf(
+        "  revision ID: 0x%x\r\n",
+        (UINT)(device_id & 0x07U)
+    );
+    uart_tx_printf(
+        "ADT7410 configuration: 0x%x\r\n",
+        (UINT)configuration
+    );
+    uart_tx_printf(
+        "  resolution: %s\r\n",
+        ((configuration & 0x80U) != 0U) ? "16 bit" : "13 bit"
+    );
+    uart_tx_printf(
+        "  operation mode: %s\r\n",
+        operation_mode_name
+    );
 }

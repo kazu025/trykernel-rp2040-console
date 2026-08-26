@@ -6,6 +6,48 @@
 #include "adt7410.h"
 
 #define ADT7410_REG_TEMPERATURE  0x00U
+#define ADT7410_REG_CONFIGURATION 0x03U
+#define ADT7410_REG_ID            0x0BU
+
+/*
+ * 8ビットレジスタを1つ読み出す
+ */
+static BOOL adt7410_read_register(UB register_address, UB *value)
+{
+    if(value == NULL){
+        return FALSE;
+    }
+
+    return i2c0_write_read(
+        ADT7410_I2C_ADDR,
+        &register_address,
+        1U,
+        value,
+        1U
+    );
+}
+
+/*
+ * デバイスIDと設定レジスタを取得する
+ */
+BOOL adt7410_read_device_info(UB *device_id, UB *configuration)
+{
+    if((device_id == NULL) || (configuration == NULL)){
+        return FALSE;
+    }
+
+    if(adt7410_read_register(ADT7410_REG_ID, device_id) == FALSE){
+        return FALSE;
+    }
+
+    if(adt7410_read_register(
+            ADT7410_REG_CONFIGURATION,
+            configuration) == FALSE){
+        return FALSE;
+    }
+
+    return TRUE;
+}
 
 /*
  * 温度をミリ℃単位で取得する
