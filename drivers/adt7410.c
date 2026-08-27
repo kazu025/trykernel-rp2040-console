@@ -100,21 +100,18 @@ BOOL adt7410_read_device_info(UB *device_id, UB *configuration)
 }
 
 /*
- * 温度をミリ℃単位で取得する
- *
- * 例:
- *   25125 = 25.125℃
- *   -5500 = -5.500℃
+ * 温度レジスタの生データと現在の分解能を取得する
  */
-BOOL adt7410_read_temperature(INT *temperature_milli_c)
+BOOL adt7410_read_raw_temperature(
+    UINT *raw_temperature,
+    BOOL *resolution_16bit
+)
 {
     UB register_address;
     UB data[2];
     UB configuration;
-    UINT raw_unsigned;
-    INT raw_signed;
 
-    if(temperature_milli_c == NULL){
+    if((raw_temperature == NULL) || (resolution_16bit == NULL)){
         return FALSE;
     }
 
@@ -135,12 +132,40 @@ BOOL adt7410_read_temperature(INT *temperature_milli_c)
         return FALSE;
     }
 
-    raw_unsigned =
-        (((UINT)data[0] << 8)
-        | (UINT)data[1]);
+    *raw_temperature =
+        ((UINT)data[0] << 8)
+        | (UINT)data[1];
+    *resolution_16bit =
+        ((configuration & ADT7410_CONFIG_RESOLUTION) != 0U);
+
+    return TRUE;
+}
+
+/*
+ * 温度をミリ℃単位で取得する
+ *
+ * 例:
+ *   25125 = 25.125℃
+ *   -5500 = -5.500℃
+ */
+BOOL adt7410_read_temperature(INT *temperature_milli_c)
+{
+    UINT raw_unsigned;
+    INT raw_signed;
+    BOOL resolution_16bit;
+
+    if(temperature_milli_c == NULL){
+        return FALSE;
+    }
+
+    if(adt7410_read_raw_temperature(
+            &raw_unsigned,
+            &resolution_16bit) == FALSE){
+        return FALSE;
+    }
 
     /* 13ビット形式では下位3ビットは状態フラグ */
-    if((configuration & ADT7410_CONFIG_RESOLUTION) == 0U){
+    if(resolution_16bit == FALSE){
         raw_unsigned &= 0xFFF8U;
     }
 

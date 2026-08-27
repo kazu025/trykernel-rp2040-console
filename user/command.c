@@ -20,6 +20,7 @@ static void cmd_i2cscan(int argc, char *argv[]);
 static void cmd_temperature(int argc, char *argv[]);
 static void cmd_adtinfo(int argc, char *argv[]);
 static void cmd_adtconfig(int argc, char *argv[]);
+static void cmd_adtraw(int argc, char *argv[]);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
 typedef struct {
@@ -37,7 +38,8 @@ static const command_t command_table[] = {
     {"i2cscan", cmd_i2cscan, "scan I2C devices"},
     {"temperature", cmd_temperature, "read temperature from ADT7410 sensor"},
     {"adtinfo", cmd_adtinfo, "show ADT7410 ID and configuration"},
-    {"adtconfig", cmd_adtconfig, "set ADT7410 resolution: 13|16"}
+    {"adtconfig", cmd_adtconfig, "set ADT7410 resolution: 13|16"},
+    {"adtraw", cmd_adtraw, "show ADT7410 raw temperature data"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -316,4 +318,38 @@ static void cmd_adtconfig(int argc, char *argv[])
         "ADT7410 resolution: %s\r\n",
         (resolution_16bit != FALSE) ? "16 bit" : "13 bit"
     );
+}
+
+static void cmd_adtraw(int argc, char *argv[])
+{
+    UINT raw_temperature;
+    BOOL resolution_16bit;
+
+    (void)argc;
+    (void)argv;
+
+    if(adt7410_read_raw_temperature(
+            &raw_temperature,
+            &resolution_16bit) == FALSE){
+        uart_tx_send("ADT7410 raw read error\r\n");
+        return;
+    }
+
+    uart_tx_printf(
+        "ADT7410 raw temperature: 0x%x\r\n",
+        raw_temperature
+    );
+    uart_tx_printf(
+        "  resolution: %s\r\n",
+        (resolution_16bit != FALSE) ? "16 bit" : "13 bit"
+    );
+
+    if(resolution_16bit == FALSE){
+        uart_tx_printf(
+            "  flags: TLOW=%u THIGH=%u TCRIT=%u\r\n",
+            raw_temperature & 0x01U,
+            (raw_temperature >> 1) & 0x01U,
+            (raw_temperature >> 2) & 0x01U
+        );
+    }
 }
