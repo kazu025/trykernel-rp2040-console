@@ -69,6 +69,7 @@ C_SRCS  := \
 	user/mini_printf.c \
 	drivers/gpio.c \
 	drivers/adt7410.c \
+	drivers/grove_lcd.c \
 	drivers/i2c.c \
 	drivers/uart.c
 #	kernel/syslib.c \
