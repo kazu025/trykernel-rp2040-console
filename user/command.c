@@ -6,6 +6,7 @@
 #include "gpio.h"
 #include "i2c.h"
 #include "adt7410.h"
+#include "grove_lcd.h"
 
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
@@ -21,6 +22,11 @@ static void cmd_temperature(int argc, char *argv[]);
 static void cmd_adtinfo(int argc, char *argv[]);
 static void cmd_adtconfig(int argc, char *argv[]);
 static void cmd_adtraw(int argc, char *argv[]);
+static void cmd_lcdtest(int argc, char *argv[]);
+static void cmd_lcdtemp(int argc, char *argv[]);
+static void cmd_lcdcolor(int argc, char *argv[]);
+static void format_temperature_line(INT temperature_milli_c, char *line);
+static BOOL parse_u8(const char *text, UB *value);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
 typedef struct {
@@ -39,7 +45,10 @@ static const command_t command_table[] = {
     {"temperature", cmd_temperature, "read temperature from ADT7410 sensor"},
     {"adtinfo", cmd_adtinfo, "show ADT7410 ID and configuration"},
     {"adtconfig", cmd_adtconfig, "set ADT7410 resolution: 13|16"},
-    {"adtraw", cmd_adtraw, "show ADT7410 raw temperature data"}
+    {"adtraw", cmd_adtraw, "show ADT7410 raw temperature data"},
+    {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
+    {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
+    {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -72,6 +81,34 @@ static BOOL str_eq(const char *a, const char *b)
     }
 
     return ((*a == '\0') && (*b == '\0'));
+}
+
+static BOOL parse_u8(const char *text, UB *value)
+{
+    UINT number = 0U;
+
+    if((text == NULL) || (value == NULL) || (*text == '\0')){
+        return FALSE;
+    }
+
+    while(*text != '\0'){
+        UINT digit;
+
+        if((*text < '0') || (*text > '9')){
+            return FALSE;
+        }
+
+        digit = (UINT)(*text - '0');
+        if((number > 25U) || ((number == 25U) && (digit > 5U))){
+            return FALSE;
+        }
+
+        number = (number * 10U) + digit;
+        text++;
+    }
+
+    *value = (UB)number;
+    return TRUE;
 }
 /*
  * トークン分割
@@ -352,4 +389,125 @@ static void cmd_adtraw(int argc, char *argv[])
             (raw_temperature >> 2) & 0x01U
         );
     }
+}
+
+static void cmd_lcdtest(int argc, char *argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    if(grove_lcd_init() == FALSE){
+        uart_tx_send("Grove LCD initialization error\r\n");
+        return;
+    }
+
+    if(grove_lcd_set_cursor(0U, 0U) == FALSE
+            || grove_lcd_write_text("Try Kernel") == FALSE
+            || grove_lcd_set_cursor(0U, 1U) == FALSE
+            || grove_lcd_write_text("LCD test") == FALSE){
+        uart_tx_send("Grove LCD write error\r\n");
+        return;
+    }
+
+    uart_tx_send("Grove LCD test complete\r\n");
+}
+
+static void format_temperature_line(INT temperature_milli_c, char *line)
+{
+    UINT magnitude;
+    UINT integer_part;
+    UINT fractional_part;
+    UINT divisor;
+    UW pos = 0U;
+
+    for(UW i = 0U; i < GROVE_LCD_COLUMNS; i++){
+        line[i] = ' ';
+    }
+    line[GROVE_LCD_COLUMNS] = '\0';
+
+    if(temperature_milli_c < 0){
+        line[pos++] = '-';
+        magnitude = (UINT)(-temperature_milli_c);
+    }else{
+        magnitude = (UINT)temperature_milli_c;
+    }
+
+    integer_part = magnitude / 1000U;
+    fractional_part = magnitude % 1000U;
+
+    divisor = 1U;
+    while((integer_part / divisor) >= 10U){
+        divisor *= 10U;
+    }
+
+    do{
+        line[pos++] = (char)('0' + (integer_part / divisor));
+        integer_part %= divisor;
+        divisor /= 10U;
+    }while(divisor != 0U);
+
+    line[pos++] = '.';
+    line[pos++] = (char)('0' + (fractional_part / 100U));
+    line[pos++] = (char)('0' + ((fractional_part / 10U) % 10U));
+    line[pos++] = (char)('0' + (fractional_part % 10U));
+    line[pos++] = ' ';
+    line[pos] = 'C';
+}
+
+static void cmd_lcdtemp(int argc, char *argv[])
+{
+    INT temperature_milli_c;
+    char temperature_line[GROVE_LCD_COLUMNS + 1U];
+
+    (void)argc;
+    (void)argv;
+
+    if(adt7410_read_temperature(&temperature_milli_c) == FALSE){
+        uart_tx_send("ADT7410 read error\r\n");
+        return;
+    }
+
+    format_temperature_line(temperature_milli_c, temperature_line);
+
+    if(grove_lcd_init() == FALSE){
+        uart_tx_send("Grove LCD initialization error\r\n");
+        return;
+    }
+
+    if(grove_lcd_set_cursor(0U, 0U) == FALSE
+            || grove_lcd_write_text("ADT7410 Temp    ") == FALSE
+            || grove_lcd_set_cursor(0U, 1U) == FALSE
+            || grove_lcd_write_text(temperature_line) == FALSE){
+        uart_tx_send("Grove LCD write error\r\n");
+        return;
+    }
+
+    uart_tx_send("ADT7410 temperature displayed on LCD\r\n");
+}
+
+static void cmd_lcdcolor(int argc, char *argv[])
+{
+    UB red;
+    UB green;
+    UB blue;
+
+    if((argc != 4)
+            || (parse_u8(argv[1], &red) == FALSE)
+            || (parse_u8(argv[2], &green) == FALSE)
+            || (parse_u8(argv[3], &blue) == FALSE)){
+        uart_tx_send("usage: lcdcolor R G B (0-255)\r\n");
+        return;
+    }
+
+    if(grove_lcd_set_rgb(red, green, blue) == FALSE){
+        uart_tx_send("Grove LCD backlight error\r\n");
+        return;
+    }
+
+    uart_tx_printf(
+        "Grove LCD color: %u %u %u\r\n",
+        (UINT)red,
+        (UINT)green,
+        (UINT)blue
+    );
 }
