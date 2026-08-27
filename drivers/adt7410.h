@@ -7,5 +7,6 @@
 
 BOOL adt7410_read_temperature(INT *temperature_milli_c);
 BOOL adt7410_read_device_info(UB *device_id, UB *configuration);
+BOOL adt7410_set_resolution(BOOL resolution_16bit);
 
 #endif /* ADT7410_H */

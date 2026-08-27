@@ -19,6 +19,7 @@ static int split_args(char *line, char *argv[], int max_args);
 static void cmd_i2cscan(int argc, char *argv[]);
 static void cmd_temperature(int argc, char *argv[]);
 static void cmd_adtinfo(int argc, char *argv[]);
+static void cmd_adtconfig(int argc, char *argv[]);
 static BOOL str_eq(const char *a, const char *b);
 typedef void (*cmd_func_t)(int argc, char *argv[]);
 typedef struct {
@@ -35,7 +36,8 @@ static const command_t command_table[] = {
     {"print",   cmd_print,  "print test"},
     {"i2cscan", cmd_i2cscan, "scan I2C devices"},
     {"temperature", cmd_temperature, "read temperature from ADT7410 sensor"},
-    {"adtinfo", cmd_adtinfo, "show ADT7410 ID and configuration"}
+    {"adtinfo", cmd_adtinfo, "show ADT7410 ID and configuration"},
+    {"adtconfig", cmd_adtconfig, "set ADT7410 resolution: 13|16"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -284,5 +286,34 @@ static void cmd_adtinfo(int argc, char *argv[])
     uart_tx_printf(
         "  operation mode: %s\r\n",
         operation_mode_name
+    );
+}
+
+static void cmd_adtconfig(int argc, char *argv[])
+{
+    BOOL resolution_16bit;
+
+    if(argc != 2){
+        uart_tx_send("usage: adtconfig 13|16\r\n");
+        return;
+    }
+
+    if(str_eq(argv[1], "13") == TRUE){
+        resolution_16bit = FALSE;
+    }else if(str_eq(argv[1], "16") == TRUE){
+        resolution_16bit = TRUE;
+    }else{
+        uart_tx_send("usage: adtconfig 13|16\r\n");
+        return;
+    }
+
+    if(adt7410_set_resolution(resolution_16bit) == FALSE){
+        uart_tx_send("ADT7410 configuration error\r\n");
+        return;
+    }
+
+    uart_tx_printf(
+        "ADT7410 resolution: %s\r\n",
+        (resolution_16bit != FALSE) ? "16 bit" : "13 bit"
     );
 }
