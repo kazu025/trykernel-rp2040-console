@@ -352,6 +352,17 @@ Repeated START
 
 電源投入時のデフォルト設定では、温度分解能は13ビット、動作モードは連続変換です。
 
+### ADT7410温度分解能の切り替え
+
+`adtconfig`コマンドは、ADT7410の温度分解能を13ビットまたは16ビットへ切り替えます。
+
+```text
+adtconfig 13
+adtconfig 16
+```
+
+設定レジスタを読み出して分解能ビットだけを変更し、書き込み後に設定値を読み戻して確認します。`temperature`コマンドは現在の設定を読み出し、13ビット時は下位3ビットを状態フラグとして除外し、16ビット時は全16ビットを温度データとして変換します。
+
 ## 必要な環境
 
 Linux MintまたはUbuntu系Linuxを想定しています。
@@ -462,6 +473,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `i2cscan` | I2Cバスに接続されたデバイスを検索 |
 | `temperature` | ADT7410から温度を取得 |
 | `adtinfo` | ADT7410のIDと設定を表示 |
+| `adtconfig 13\|16` | ADT7410の温度分解能を切り替え |
 
 ## 動作例
 
@@ -484,6 +496,7 @@ commands:
    i2cscan -  scan I2C devices
    temperature -  read temperature from ADT7410 sensor
    adtinfo -  show ADT7410 ID and configuration
+   adtconfig -  set ADT7410 resolution: 13|16
 > status
 TryKernel status: running
 LED mode: OFF

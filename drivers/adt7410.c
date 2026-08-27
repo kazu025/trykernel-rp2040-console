@@ -8,6 +8,7 @@
 #define ADT7410_REG_TEMPERATURE  0x00U
 #define ADT7410_REG_CONFIGURATION 0x03U
 #define ADT7410_REG_ID            0x0BU
+#define ADT7410_CONFIG_RESOLUTION  (1U << 7)
 
 /*
  * 8ビットレジスタを1つ読み出す
@@ -25,6 +26,55 @@ static BOOL adt7410_read_register(UB register_address, UB *value)
         value,
         1U
     );
+}
+
+/*
+ * 8ビットレジスタへ1つ書き込む
+ */
+static BOOL adt7410_write_register(UB register_address, UB value)
+{
+    UB data[2];
+
+    data[0] = register_address;
+    data[1] = value;
+
+    return i2c0_write(ADT7410_I2C_ADDR, data, 2U);
+}
+
+/*
+ * 温度分解能を13ビットまたは16ビットへ切り替える
+ */
+BOOL adt7410_set_resolution(BOOL resolution_16bit)
+{
+    UB configuration;
+
+    if(adt7410_read_register(
+            ADT7410_REG_CONFIGURATION,
+            &configuration) == FALSE){
+        return FALSE;
+    }
+
+    if(resolution_16bit != FALSE){
+        configuration |= ADT7410_CONFIG_RESOLUTION;
+    }else{
+        configuration &= (UB)~ADT7410_CONFIG_RESOLUTION;
+    }
+
+    if(adt7410_write_register(
+            ADT7410_REG_CONFIGURATION,
+            configuration) == FALSE){
+        return FALSE;
+    }
+
+    /* 書き込んだ設定を読み戻して確認する */
+    if(adt7410_read_register(
+            ADT7410_REG_CONFIGURATION,
+            &configuration) == FALSE){
+        return FALSE;
+    }
+
+    return (((configuration & ADT7410_CONFIG_RESOLUTION) != 0U)
+        == (resolution_16bit != FALSE));
 }
 
 /*
@@ -60,10 +110,17 @@ BOOL adt7410_read_temperature(INT *temperature_milli_c)
 {
     UB register_address;
     UB data[2];
+    UB configuration;
     UINT raw_unsigned;
     INT raw_signed;
 
     if(temperature_milli_c == NULL){
+        return FALSE;
+    }
+
+    if(adt7410_read_register(
+            ADT7410_REG_CONFIGURATION,
+            &configuration) == FALSE){
         return FALSE;
     }
 
@@ -78,14 +135,14 @@ BOOL adt7410_read_temperature(INT *temperature_milli_c)
         return FALSE;
     }
 
-    /*
-     * デフォルトの13ビット形式では、
-     * 下位3ビットはTCRIT、THIGH、TLOWの状態フラグ
-     */
     raw_unsigned =
         (((UINT)data[0] << 8)
-        | (UINT)data[1])
-        & 0xFFF8U;
+        | (UINT)data[1]);
+
+    /* 13ビット形式では下位3ビットは状態フラグ */
+    if((configuration & ADT7410_CONFIG_RESOLUTION) == 0U){
+        raw_unsigned &= 0xFFF8U;
+    }
 
     /* 16ビット2の補数をINTへ変換 */
     if((raw_unsigned & 0x8000U) != 0U){

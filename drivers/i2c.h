@@ -8,6 +8,11 @@
 
 void i2c0_init(void);
 BOOL i2c0_probe(UB addr);
+BOOL i2c0_write(
+    UB addr,
+    const UB *data,
+    UINT size
+);
 
 BOOL i2c0_write_read(
     UB addr,
