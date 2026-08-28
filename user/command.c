@@ -2,10 +2,12 @@
 #include "task_led.h"
 #include "command.h"
 #include "uart_tx.h"
+#include "mini_printf.h"
 #include "uart.h"
 #include "gpio.h"
 #include "i2c.h"
 #include "adt7410.h"
+#include "mpu6050.h"
 #include "grove_lcd.h"
 
 /* --- コマンドバッファ最大数 --- */
@@ -22,6 +24,9 @@ static void cmd_temperature(int argc, char *argv[]);
 static void cmd_adtinfo(int argc, char *argv[]);
 static void cmd_adtconfig(int argc, char *argv[]);
 static void cmd_adtraw(int argc, char *argv[]);
+static void cmd_mpuid(int argc, char *argv[]);
+static void cmd_mpuraw(int argc, char *argv[]);
+static void cmd_mpu(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
@@ -46,6 +51,9 @@ static const command_t command_table[] = {
     {"adtinfo", cmd_adtinfo, "show ADT7410 ID and configuration"},
     {"adtconfig", cmd_adtconfig, "set ADT7410 resolution: 13|16"},
     {"adtraw", cmd_adtraw, "show ADT7410 raw temperature data"},
+    {"mpuid", cmd_mpuid, "show MPU-6050 WHO_AM_I"},
+    {"mpuraw", cmd_mpuraw, "show MPU-6050 raw sensor data"},
+    {"mpu", cmd_mpu, "show acceleration, gyro and temperature"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
     {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"}
@@ -389,6 +397,205 @@ static void cmd_adtraw(int argc, char *argv[])
             (raw_temperature >> 2) & 0x01U
         );
     }
+}
+
+static void cmd_mpuid(int argc, char *argv[])
+{
+    UB device_id;
+
+    (void)argc;
+    (void)argv;
+
+    if(mpu6050_read_who_am_i(&device_id) == FALSE){
+        uart_tx_send("MPU-6050 WHO_AM_I read error\r\n");
+        return;
+    }
+
+    uart_tx_printf("MPU-6050 WHO_AM_I: 0x%x\r\n", (UINT)device_id);
+
+    if(device_id == MPU6050_WHO_AM_I){
+        uart_tx_send("  device: MPU-6050\r\n");
+    }else if(device_id == MPU6500_WHO_AM_I){
+        uart_tx_send("  device: MPU-6500 compatible\r\n");
+    }else{
+        uart_tx_send("  unexpected device ID\r\n");
+    }
+}
+
+static void cmd_mpuraw(int argc, char *argv[])
+{
+    mpu6050_raw_data_t raw_data;
+
+    (void)argc;
+    (void)argv;
+
+    if(mpu6050_init() == FALSE){
+        uart_tx_send("MPU-6050 initialization error\r\n");
+        return;
+    }
+
+    if(mpu6050_read_raw(&raw_data) == FALSE){
+        uart_tx_send("MPU-6050 raw data read error\r\n");
+        return;
+    }
+
+    uart_tx_printf(
+        "MPU-6050 accel raw: X=%d Y=%d Z=%d\r\n",
+        raw_data.accel_x,
+        raw_data.accel_y,
+        raw_data.accel_z
+    );
+    uart_tx_printf(
+        "MPU-6050 gyro raw:  X=%d Y=%d Z=%d\r\n",
+        raw_data.gyro_x,
+        raw_data.gyro_y,
+        raw_data.gyro_z
+    );
+    uart_tx_printf(
+        "MPU-6050 temperature raw: %d\r\n",
+        raw_data.temperature
+    );
+}
+
+static void format_milli_value(
+    INT value,
+    const char *unit,
+    char *text,
+    UW text_size
+)
+{
+    UINT magnitude;
+    UINT integer_part;
+    UINT fractional_part;
+    const char *sign;
+
+    if(value < 0){
+        sign = "-";
+        magnitude = (UINT)(-value);
+    }else{
+        sign = "";
+        magnitude = (UINT)value;
+    }
+
+    integer_part = magnitude / 1000U;
+    fractional_part = magnitude % 1000U;
+
+    /* mini_printfは桁指定に対応していないため手動でゼロを補う */
+    if(fractional_part < 10U){
+        mini_snprintf(
+            text,
+            text_size,
+            "%s%u.00%u %s",
+            sign,
+            integer_part,
+            fractional_part,
+            unit
+        );
+    }else if(fractional_part < 100U){
+        mini_snprintf(
+            text,
+            text_size,
+            "%s%u.0%u %s",
+            sign,
+            integer_part,
+            fractional_part,
+            unit
+        );
+    }else{
+        mini_snprintf(
+            text,
+            text_size,
+            "%s%u.%u %s",
+            sign,
+            integer_part,
+            fractional_part,
+            unit
+        );
+    }
+}
+
+static void cmd_mpu(int argc, char *argv[])
+{
+    mpu6050_raw_data_t raw_data;
+    UB device_id;
+    INT accel_x_milli_g;
+    INT accel_y_milli_g;
+    INT accel_z_milli_g;
+    INT gyro_x_milli_dps;
+    INT gyro_y_milli_dps;
+    INT gyro_z_milli_dps;
+    INT temperature_milli_c;
+    char accel_x_text[24];
+    char accel_y_text[24];
+    char accel_z_text[24];
+    char gyro_x_text[24];
+    char gyro_y_text[24];
+    char gyro_z_text[24];
+    char temperature_text[24];
+
+    (void)argc;
+    (void)argv;
+
+    if(mpu6050_read_who_am_i(&device_id) == FALSE
+            || mpu6050_is_supported_device(device_id) == FALSE){
+        uart_tx_send("MPU sensor identification error\r\n");
+        return;
+    }
+
+    if(mpu6050_init() == FALSE
+            || mpu6050_read_raw(&raw_data) == FALSE){
+        uart_tx_send("MPU sensor read error\r\n");
+        return;
+    }
+
+    /* 初期レンジ: 加速度±2g、ジャイロ±250dps */
+    accel_x_milli_g = (raw_data.accel_x * 1000) / 16384;
+    accel_y_milli_g = (raw_data.accel_y * 1000) / 16384;
+    accel_z_milli_g = (raw_data.accel_z * 1000) / 16384;
+    gyro_x_milli_dps = (raw_data.gyro_x * 1000) / 131;
+    gyro_y_milli_dps = (raw_data.gyro_y * 1000) / 131;
+    gyro_z_milli_dps = (raw_data.gyro_z * 1000) / 131;
+
+    if(device_id == MPU6500_WHO_AM_I){
+        temperature_milli_c =
+            (INT)(((D)raw_data.temperature * 100000) / 33387) + 21000;
+    }else{
+        temperature_milli_c =
+            (raw_data.temperature * 50) / 17 + 36530;
+    }
+
+    format_milli_value(
+        accel_x_milli_g, "g", accel_x_text, sizeof(accel_x_text));
+    format_milli_value(
+        accel_y_milli_g, "g", accel_y_text, sizeof(accel_y_text));
+    format_milli_value(
+        accel_z_milli_g, "g", accel_z_text, sizeof(accel_z_text));
+    format_milli_value(
+        gyro_x_milli_dps, "dps", gyro_x_text, sizeof(gyro_x_text));
+    format_milli_value(
+        gyro_y_milli_dps, "dps", gyro_y_text, sizeof(gyro_y_text));
+    format_milli_value(
+        gyro_z_milli_dps, "dps", gyro_z_text, sizeof(gyro_z_text));
+    format_milli_value(
+        temperature_milli_c,
+        "C",
+        temperature_text,
+        sizeof(temperature_text)
+    );
+
+    uart_tx_printf(
+        "Acceleration: X=%s Y=%s Z=%s\r\n",
+        accel_x_text,
+        accel_y_text,
+        accel_z_text
+    );
+    uart_tx_printf(
+        "Gyroscope:    X=%s Y=%s Z=%s\r\n",
+        gyro_x_text,
+        gyro_y_text,
+        gyro_z_text
+    );
+    uart_tx_printf("Temperature:  %s\r\n", temperature_text);
 }
 
 static void cmd_lcdtest(int argc, char *argv[])
