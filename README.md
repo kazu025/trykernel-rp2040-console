@@ -401,23 +401,52 @@ adtconfig 16
 
 `adtraw`コマンドは、温度レジスタから読み出した16ビットの生データを16進数で表示します。13ビットモードでは、下位3ビットの`TLOW`、`THIGH`、`TCRIT`状態フラグも表示します。16ビットモードでは、下位3ビットも温度データの一部です。
 
-### Grove RGB LCDと周期温度表示
+### Grove RGB LCDと周期センサー表示
 
-Grove RGB LCD Backlight V5.0は、文字表示用の`0x3E`とRGBバックライト用の`0x30`を使用します。LCD温度表示タスクはADT7410の温度を読み出してLCDへ表示し、`tk_dly_tsk(1000)`で約1秒待ってから更新を繰り返します。
+Grove RGB LCD Backlight V5.0は、文字表示用の`0x3E`とRGBバックライト用の`0x30`を使用します。LCD表示タスクは選択中のセンサーを読み出してLCDへ表示し、`tk_dly_tsk(1000)`で約1秒待ってから更新を繰り返します。
 
 ```text
 READY
   ↓
-ADT7410から温度を取得
+選択中のセンサーからデータを取得
   ↓
-LCDの2行目を更新
+LCDの2行を更新
   ↓ tk_dly_tsk(1000)
 WAIT
   ↓ 約1秒経過
 READY
 ```
 
-LCDの初期化に失敗した場合は、1秒待ってから再試行します。初期化成功後は、温度の読み出しと表示更新だけを周期的に実行します。
+LCDの初期化に失敗した場合は、1秒待ってから再試行します。LCDを操作するタスクを1つに限定し、複数の表示処理が競合しないようにしています。
+
+`lcdmode`コマンドで表示内容を切り替えます。
+
+```text
+lcdmode temp
+lcdmode accel
+lcdmode gyro
+```
+
+引数を付けずに`lcdmode`を実行すると、現在の表示モードを確認できます。
+
+### MPU-6050／MPU-6500互換モーションセンサー
+
+MPUモーションセンサーはI2Cアドレス`0x68`で接続します。`mpuid`コマンドは`WHO_AM_I`レジスタ`0x75`を読み出し、`0x68`をMPU-6050、`0x70`をMPU-6500互換として識別します。
+
+```text
+> mpuid
+MPU-6050 WHO_AM_I: 0x70
+  device: MPU-6500 compatible
+```
+
+`mpuraw`は`0x3B`から14バイトを連続して読み出し、加速度3軸、内部温度、ジャイロ3軸の生データを表示します。`mpu`は初期レンジに合わせて、加速度をg、ジャイロをdps、内部温度を℃へ換算します。内部温度の式は、検出したデバイスIDに応じて切り替えます。
+
+```text
+> mpu
+Acceleration: X=1.015 g Y=-0.017 g Z=0.226 g
+Gyroscope:    X=1.236 dps Y=-1.282 dps Z=-0.351 dps
+Temperature:  30.153 C
+```
 
 ## 必要な環境
 
@@ -531,9 +560,13 @@ minicom -D /dev/ttyACM0 -b 115200
 | `adtinfo` | ADT7410のIDと設定を表示 |
 | `adtconfig 13\|16` | ADT7410の温度分解能を切り替え |
 | `adtraw` | ADT7410の温度生データを表示 |
+| `mpuid` | MPUセンサーのWHO_AM_Iと機種を表示 |
+| `mpuraw` | MPUセンサーの加速度・温度・ジャイロ生データを表示 |
+| `mpu` | MPUセンサーの値をg、dps、℃へ換算して表示 |
 | `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
 | `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
 | `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
+| `lcdmode [temp\|accel\|gyro]` | 周期LCD表示の確認・切り替え |
 
 ## 動作例
 
@@ -558,9 +591,13 @@ commands:
    adtinfo -  show ADT7410 ID and configuration
    adtconfig -  set ADT7410 resolution: 13|16
    adtraw -  show ADT7410 raw temperature data
+   mpuid -  show MPU-6050 WHO_AM_I
+   mpuraw -  show MPU-6050 raw sensor data
+   mpu -  show acceleration, gyro and temperature
    lcdtest -  test Grove RGB LCD V5.0
    lcdtemp -  show ADT7410 temperature on LCD
    lcdcolor -  set LCD backlight: R G B
+   lcdmode -  set LCD mode: temp|accel|gyro
 > status
 TryKernel status: running
 LED mode: OFF

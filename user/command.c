@@ -9,6 +9,7 @@
 #include "adt7410.h"
 #include "mpu6050.h"
 #include "grove_lcd.h"
+#include "task_lcdtemp.h"
 
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
@@ -30,6 +31,7 @@ static void cmd_mpu(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
+static void cmd_lcdmode(int argc, char *argv[]);
 static void format_temperature_line(INT temperature_milli_c, char *line);
 static BOOL parse_u8(const char *text, UB *value);
 static BOOL str_eq(const char *a, const char *b);
@@ -56,7 +58,8 @@ static const command_t command_table[] = {
     {"mpu", cmd_mpu, "show acceleration, gyro and temperature"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
-    {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"}
+    {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"},
+    {"lcdmode", cmd_lcdmode, "set LCD mode: temp|accel|gyro"}
 };
 static const int command_count = sizeof(command_table)/sizeof(command_table[0]);
 
@@ -717,4 +720,47 @@ static void cmd_lcdcolor(int argc, char *argv[])
         (UINT)green,
         (UINT)blue
     );
+}
+
+static const char *lcd_mode_name(lcd_display_mode_t mode)
+{
+    if(mode == LCD_MODE_ACCELERATION){
+        return "accel";
+    }
+    if(mode == LCD_MODE_GYROSCOPE){
+        return "gyro";
+    }
+    return "temp";
+}
+
+static void cmd_lcdmode(int argc, char *argv[])
+{
+    lcd_display_mode_t mode;
+
+    if(argc == 1){
+        uart_tx_printf(
+            "LCD mode: %s\r\n",
+            lcd_mode_name(task_lcdtemp_get_mode())
+        );
+        return;
+    }
+
+    if(argc != 2){
+        uart_tx_send("usage: lcdmode temp|accel|gyro\r\n");
+        return;
+    }
+
+    if(str_eq(argv[1], "temp") == TRUE){
+        mode = LCD_MODE_TEMPERATURE;
+    }else if(str_eq(argv[1], "accel") == TRUE){
+        mode = LCD_MODE_ACCELERATION;
+    }else if(str_eq(argv[1], "gyro") == TRUE){
+        mode = LCD_MODE_GYROSCOPE;
+    }else{
+        uart_tx_send("usage: lcdmode temp|accel|gyro\r\n");
+        return;
+    }
+
+    task_lcdtemp_set_mode(mode);
+    uart_tx_printf("LCD mode: %s\r\n", lcd_mode_name(mode));
 }
