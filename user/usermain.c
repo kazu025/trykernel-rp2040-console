@@ -3,6 +3,7 @@
 #include "uart_sync.h"
 #include "uart_tx.h"
 #include "task_uartrx.h"
+#include "task_lcdtemp.h"
 #include "i2c.h"
 
 /*
@@ -14,6 +15,7 @@
 #define PRIORITY_UARTTX     6
 #define PRIORITY_LOG_A      8
 #define PRIORITY_LOG_B      10
+#define PRIORITY_LCDTEMP    11
 /*
  * stack size
  */
@@ -22,6 +24,7 @@
 #define STACK_UARTTX    1024
 #define STACK_LOG_A     1024
 #define STACK_LOG_B     1024
+#define STACK_LCDTEMP   1024
 /*
  * tk_set_flg() scheduler呼び出し確認用
  */
@@ -172,6 +175,17 @@ T_CTSK  ctsk_uartlog_b = {
     .bufptr     = tskstk_uartlog_b,
 };
 
+/* LCD温度表示タスク生成情報 */
+UW  tskstk_lcdtemp[STACK_LCDTEMP/sizeof(UW)];
+ID  tskid_lcdtemp;
+T_CTSK  ctsk_lcdtemp = {
+    .tskatr     = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task       = task_lcdtemp,
+    .itskpri    = PRIORITY_LCDTEMP,
+    .stksz      = STACK_LCDTEMP,
+    .bufptr     = tskstk_lcdtemp,
+};
+
 
 int usermain(void)
 {
@@ -235,6 +249,13 @@ int usermain(void)
         return (int)tskid_uartlog_b;
     }
     tk_sta_tsk(tskid_uartlog_b, 0);
+
+    /* LCD温度表示タスク */
+    tskid_lcdtemp = tk_cre_tsk(&ctsk_lcdtemp);
+    if(tskid_lcdtemp < E_OK){
+        return (int)tskid_lcdtemp;
+    }
+    tk_sta_tsk(tskid_lcdtemp, 0);
 
 #if ENABLE_FLGTEST
     tskid_flgtest_a = tk_cre_tsk(&ctsk_flgtest_a);
