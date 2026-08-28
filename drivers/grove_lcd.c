@@ -17,17 +17,18 @@
 #define GROVE_LCD_CONTROL_CMD    0x80U
 #define GROVE_LCD_CONTROL_DATA   0x40U
 
-#define GROVE_LCD_CMD_CLEAR      0x01U
-#define GROVE_LCD_CMD_ENTRY_MODE 0x06U
-#define GROVE_LCD_CMD_DISPLAY_ON 0x0CU
-#define GROVE_LCD_CMD_FUNCTION   0x28U
+#define GROVE_LCD_CMD_CLEAR      0x01U      // 画面クリア&カー位置を先頭に戻す
+#define GROVE_LCD_CMD_ENTRY_MODE 0x06U      // カーソル移動方向設定 左→右
+#define GROVE_LCD_CMD_DISPLAY_ON 0x0CU      // 表示ON カーソルOFF 点滅OFF
+#define GROVE_LCD_CMD_FUNCTION   0x28U      // 機能設定
 
-#define GROVE_RGB_REG_RESET      0x00U
-#define GROVE_RGB_REG_LEDOUT     0x04U
-#define GROVE_RGB_REG_RED        0x06U
-#define GROVE_RGB_REG_GREEN      0x07U
-#define GROVE_RGB_REG_BLUE       0x08U
+#define GROVE_RGB_REG_RESET      0x00U      // RESET レジスタ
+#define GROVE_RGB_REG_LEDOUT     0x04U      // LEDOUT レジスタ
+#define GROVE_RGB_REG_RED        0x06U      // RED レジスタ
+#define GROVE_RGB_REG_GREEN      0x07U      // GREEN レジスタ
+#define GROVE_RGB_REG_BLUE       0x08U      // BLUE レジスタ
 
+// I2Cコマンド送信
 static BOOL grove_lcd_write_pair(UB address, UB first, UB second)
 {
     UB data[2];
@@ -38,6 +39,7 @@ static BOOL grove_lcd_write_pair(UB address, UB first, UB second)
     return i2c0_write(address, data, 2U);
 }
 
+// 文字表示を制御する
 static BOOL grove_lcd_command(UB command)
 {
     return grove_lcd_write_pair(
@@ -47,6 +49,7 @@ static BOOL grove_lcd_command(UB command)
     );
 }
 
+// RGBバックライト側を制御する
 static BOOL grove_rgb_write_register(UB reg, UB value)
 {
     return grove_lcd_write_pair(
@@ -55,7 +58,7 @@ static BOOL grove_rgb_write_register(UB reg, UB value)
         value
     );
 }
-
+// 画面クリアとカーソルを先頭に移動
 BOOL grove_lcd_clear(void)
 {
     if(grove_lcd_command(GROVE_LCD_CMD_CLEAR) == FALSE){
@@ -65,7 +68,7 @@ BOOL grove_lcd_clear(void)
     tk_dly_tsk(10);
     return TRUE;
 }
-
+// カーソル位置設定
 BOOL grove_lcd_set_cursor(UB column, UB row)
 {
     UB address;
@@ -80,7 +83,7 @@ BOOL grove_lcd_set_cursor(UB column, UB row)
 
     return grove_lcd_command(address);
 }
-
+// テキスト設定
 BOOL grove_lcd_write_text(const char *text)
 {
     if(text == NULL){
@@ -99,7 +102,7 @@ BOOL grove_lcd_write_text(const char *text)
 
     return TRUE;
 }
-
+// RGBバックライト色設定
 BOOL grove_lcd_set_rgb(UB red, UB green, UB blue)
 {
     /* 単独で呼び出しても動作するようRGBドライバを初期化する */
@@ -124,7 +127,7 @@ BOOL grove_lcd_set_rgb(UB red, UB green, UB blue)
 
     return TRUE;
 }
-
+// 初期化
 BOOL grove_lcd_init(void)
 {
     /* LCD電源投入後の待ち時間 */
