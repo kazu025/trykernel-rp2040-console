@@ -25,6 +25,42 @@
 
 #define I2C0_TIMEOUT_LOOP   100000U
 
+/* I2C0排他制御用バイナリセマフォ */
+static ID i2c0_sync_semid;
+
+/*
+ * I2C0排他制御の初期化
+ */
+ER i2c0_sync_init(void)
+{
+    T_CSEM csem = {
+        .sematr = TA_TFIFO | TA_FIRST,
+        .isemcnt = 1,
+        .maxsem = 1,
+    };
+
+    i2c0_sync_semid = tk_cre_sem(&csem);
+    if(i2c0_sync_semid < E_OK){
+        return (ER)i2c0_sync_semid;
+    }
+
+    return E_OK;
+}
+
+static BOOL i2c0_sync_lock(void)
+{
+    return (tk_wai_sem(
+        i2c0_sync_semid,
+        1,
+        TMO_FEVR
+    ) == E_OK);
+}
+
+static BOOL i2c0_sync_unlock(void)
+{
+    return (tk_sig_sem(i2c0_sync_semid, 1) == E_OK);
+}
+
 /*
  * I2C0の有効／無効を切り替える
  */
@@ -191,7 +227,11 @@ static BOOL i2c0_wait_read_byte(UB *data)
 /*
  * 指定したアドレスへデータを書き込む
  */
-BOOL i2c0_write(UB addr, const UB *data, UINT size)
+static BOOL i2c0_write_unlocked(
+    UB addr,
+    const UB *data,
+    UINT size
+)
 {
     UINT i;
     UW command;
@@ -251,7 +291,7 @@ cleanup:
  * レジスタ番号などを書き込んだ後、
  * Repeated STARTでデータを読み出す
  */
-BOOL i2c0_write_read(
+static BOOL i2c0_write_read_unlocked(
     UB addr,
     const UB *write_data,
     UINT write_size,
@@ -351,15 +391,18 @@ cleanup:
 }
 
 /*
- * 指定した7ビットアドレスから
- * 1バイトのダミー読み出しを行い、ACKを確認する
+ * 指定した7ビットアドレスへ
+ * 0x00を1バイト書き込み、ACKを確認する
+ *
+ * Grove LCDの文字表示コントローラは読み出しに対応しないため、
+ * 読み出しによるプローブは使用しない。
  */
-BOOL i2c0_probe(UB addr)
+static BOOL i2c0_probe_unlocked(UB addr)
 {
     UW count;
     UW raw_status;
-    BOOL acknowledged = FALSE;
     BOOL stopped = FALSE;
+    BOOL aborted = FALSE;
 
     /* I2C予約アドレスを除外 */
     if((addr < 0x08U) || (addr > 0x77U)){
@@ -380,10 +423,10 @@ BOOL i2c0_probe(UB addr)
         return FALSE;
     }
 
-    /* 1バイト読み出し後、STOP条件を生成 */
+    /* 0x00を1バイト書き込み後、STOP条件を生成 */
     out_w(
         I2C0_BASE + I2Cx_DATA_CMD,
-        I2C_DATA_CMD_READ | I2C_DATA_CMD_STOP
+        0x00U | I2C_DATA_CMD_STOP
     );
 
     for(count = 0; count < I2C0_TIMEOUT_LOOP; count++){
@@ -392,13 +435,7 @@ BOOL i2c0_probe(UB addr)
         /* アドレスNACKなどによる送信中断 */
         if((raw_status & I2C_RAW_TX_ABRT) != 0U){
             (void)in_w(I2C0_BASE + I2Cx_CLR_TX_ABRT);
-            break;
-        }
-
-        /* 受信データがあればACKされたと判断 */
-        if(in_w(I2C0_BASE + I2Cx_RXFLR) != 0U){
-            (void)in_w(I2C0_BASE + I2Cx_DATA_CMD);
-            acknowledged = TRUE;
+            aborted = TRUE;
         }
 
         /* STOP条件が完了 */
@@ -409,7 +446,72 @@ BOOL i2c0_probe(UB addr)
         }
     }
 
+    /* ABORT後のSTOPを含む残存状態をクリアする */
+    (void)in_w(I2C0_BASE + I2Cx_CLR_INTR);
     (void)i2c0_set_enabled(FALSE);
 
-    return ((acknowledged != FALSE) && (stopped != FALSE));
+    return ((aborted == FALSE) && (stopped != FALSE));
+}
+
+BOOL i2c0_write(UB addr, const UB *data, UINT size)
+{
+    BOOL result;
+
+    if(i2c0_sync_lock() == FALSE){
+        return FALSE;
+    }
+
+    result = i2c0_write_unlocked(addr, data, size);
+
+    if(i2c0_sync_unlock() == FALSE){
+        return FALSE;
+    }
+
+    return result;
+}
+
+BOOL i2c0_write_read(
+    UB addr,
+    const UB *write_data,
+    UINT write_size,
+    UB *read_data,
+    UINT read_size
+)
+{
+    BOOL result;
+
+    if(i2c0_sync_lock() == FALSE){
+        return FALSE;
+    }
+
+    result = i2c0_write_read_unlocked(
+        addr,
+        write_data,
+        write_size,
+        read_data,
+        read_size
+    );
+
+    if(i2c0_sync_unlock() == FALSE){
+        return FALSE;
+    }
+
+    return result;
+}
+
+BOOL i2c0_probe(UB addr)
+{
+    BOOL result;
+
+    if(i2c0_sync_lock() == FALSE){
+        return FALSE;
+    }
+
+    result = i2c0_probe_unlocked(addr);
+
+    if(i2c0_sync_unlock() == FALSE){
+        return FALSE;
+    }
+
+    return result;
 }

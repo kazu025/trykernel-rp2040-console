@@ -192,6 +192,10 @@ int usermain(void)
     ER ercd;
     led25_init();   // PicoボードのLED初期化
     i2c0_init();   // I2C初期化
+    ercd = i2c0_sync_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
 #if ENABLE_FLGTEST
     if(create_flag() < E_OK){
         return -1;

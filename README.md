@@ -72,6 +72,10 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - I2Cデバイス検索コマンド
 - ADT7410温度センサードライバ
 - ADT7410温度取得コマンド
+- Grove RGB LCD Backlight V5.0ドライバ
+- ADT7410温度のLCD周期表示タスク
+- UARTコマンドによるRGBバックライト色設定
+- バイナリセマフォによるI2C0のタスク間排他制御
 
 ## UARTの構成
 
@@ -309,20 +313,48 @@ I2C0を使用し、RP2040のレジスタを直接操作しています。
 
 GPIO4とGPIO5では内部プルアップを有効にしていますが、安定した通信には外部プルアップ抵抗を使用することを推奨します。市販のセンサーモジュールには、プルアップ抵抗が実装されている場合があります。
 
-`i2cscan`コマンドは、予約アドレスを除く`0x08`から`0x77`までを走査します。各アドレスに対して1バイトのダミー読み出しを行い、ACKが返されたアドレスを表示します。
+`i2cscan`コマンドは、予約アドレスを除く`0x08`から`0x77`までを走査します。各アドレスへ`0x00`を1バイト書き込み、ACKが返されたアドレスを表示します。
+
+Grove LCDの文字表示コントローラは読み出しに対応しないため、ダミー読み出しによる検索は使用していません。現在の接続では次の3デバイスを検出します。
+
+| アドレス | デバイス |
+|---|---|
+| `0x30` | Grove LCD V5.0 RGBバックライト制御 |
+| `0x3E` | Grove LCD文字表示コントローラ |
+| `0x48` | ADT7410温度センサー |
 
 ```text
 I2C0初期化
     ↓
 ターゲットアドレスを設定
     ↓
-1バイト読み出し要求
+0x00を1バイト書き込み
     ↓
 ACK／NACKを確認
     ↓
 次のアドレスへ
 ```
-書き込み専用など、ダミー読み出しに応答しないデバイスは検出できない場合があります。
+アドレス検索時の1バイト書き込みがデバイス固有の操作になる場合があるため、接続するデバイスの仕様を確認して使用してください。
+
+### I2Cバスの排他制御
+
+LCD温度表示タスクとUARTコマンドは、同じI2C0コントローラを共有します。複数タスクが同時にI2Cレジスタを操作しないよう、初期資源数1、最大資源数1のバイナリセマフォで各I2Cトランザクションを保護しています。
+
+```text
+I2C APIを呼び出す
+    ↓
+tk_wai_sem(..., TMO_FEVR)
+    ├─ セマフォを獲得 → I2C通信を実行
+    └─ 使用中         → WAITキューへ移動
+                              ↓
+I2C通信終了
+    ↓
+tk_sig_sem()
+    ↓
+待っているタスクをREADYキューへ移動
+```
+
+公開APIの`i2c0_write()`、`i2c0_write_read()`、`i2c0_probe()`がセマフォを獲得・返却します。従来のレジスタ操作部分は内部の`*_unlocked()`関数として分離し、通信途中でエラーになった場合でも公開API側でセマフォを返却します。
 
 ### ADT7410温度取得
 
@@ -368,6 +400,24 @@ adtconfig 16
 ### ADT7410温度生データ
 
 `adtraw`コマンドは、温度レジスタから読み出した16ビットの生データを16進数で表示します。13ビットモードでは、下位3ビットの`TLOW`、`THIGH`、`TCRIT`状態フラグも表示します。16ビットモードでは、下位3ビットも温度データの一部です。
+
+### Grove RGB LCDと周期温度表示
+
+Grove RGB LCD Backlight V5.0は、文字表示用の`0x3E`とRGBバックライト用の`0x30`を使用します。LCD温度表示タスクはADT7410の温度を読み出してLCDへ表示し、`tk_dly_tsk(1000)`で約1秒待ってから更新を繰り返します。
+
+```text
+READY
+  ↓
+ADT7410から温度を取得
+  ↓
+LCDの2行目を更新
+  ↓ tk_dly_tsk(1000)
+WAIT
+  ↓ 約1秒経過
+READY
+```
+
+LCDの初期化に失敗した場合は、1秒待ってから再試行します。初期化成功後は、温度の読み出しと表示更新だけを周期的に実行します。
 
 ## 必要な環境
 
@@ -481,6 +531,9 @@ minicom -D /dev/ttyACM0 -b 115200
 | `adtinfo` | ADT7410のIDと設定を表示 |
 | `adtconfig 13\|16` | ADT7410の温度分解能を切り替え |
 | `adtraw` | ADT7410の温度生データを表示 |
+| `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
+| `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
+| `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
 
 ## 動作例
 
@@ -505,6 +558,9 @@ commands:
    adtinfo -  show ADT7410 ID and configuration
    adtconfig -  set ADT7410 resolution: 13|16
    adtraw -  show ADT7410 raw temperature data
+   lcdtest -  test Grove RGB LCD V5.0
+   lcdtemp -  show ADT7410 temperature on LCD
+   lcdcolor -  set LCD backlight: R G B
 > status
 TryKernel status: running
 LED mode: OFF
@@ -522,15 +578,17 @@ abcdef
 test: abc Z -123 456 1a2b3c %
 > i2cscan
 Scanning I2C bus...
+Found device at 0x30
+Found device at 0x3e
 Found device at 0x48
-I2C scan complete. Found 1 device(s).
+I2C scan complete. Found 3 device(s).
 > temperature
 ADT7410 temperature: 25.250 C
 > temperature
 ADT7410 temperature: 25.313 C
 ```
 
-上記の例では、I2Cアドレス`0x48`のADT7410を検出し、温度を取得しています。ADT7410の13ビットモードの分解能は`0.0625℃`であるため、表示値は約`0.063℃`単位で変化します。
+上記の例では、Grove LCDの`0x30`と`0x3E`、ADT7410の`0x48`を検出し、温度を取得しています。ADT7410の13ビットモードの分解能は`0.0625℃`であるため、表示値は約`0.063℃`単位で変化します。
 
 起動時に次のように表示される場合があります。
 
@@ -550,6 +608,7 @@ ADT7410 temperature: 25.313 C
 | UART TX | 6 | 送信キューの取り出しとUART出力 |
 | UART Log A | 8 | 送信競合テスト用ログ |
 | UART Log B | 10 | 送信競合テスト用ログ |
+| LCD Temperature | 11 | ADT7410温度のLCD周期表示 |
 | LED | 12 | LEDの点灯・消灯・点滅 |
 
 ログタスクの出力は、`user/task_uartlog.c`の`ENABLE_UART_LOG_TEST`で有効または無効にできます。現在の初期値は無効です。
@@ -601,7 +660,8 @@ ADT7410 temperature: 25.313 C
 - I2C通信は現在ポーリング方式です。
 - I2CはI2C0、GPIO4／GPIO5、100kHz固定です。
 - `i2cscan`は7ビットアドレスだけに対応しています。
-- 現在、I2Cバスのタスク間排他制御は実装していません。
+- I2Cトランザクションはバイナリセマフォでタスク間排他制御しています。
+- `i2cscan`は現在接続しているデバイスに合わせて、`0x00`の1バイト書き込みでACKを確認します。
 - ADT7410はI2Cアドレス`0x48`、デフォルト13ビットモードで使用しています。
 - `temperature`コマンドは浮動小数点演算を使用せず、ミリ℃単位の整数で温度を処理します。
 
@@ -643,6 +703,10 @@ ADT7410 temperature: 25.313 C
 - I2C0ドライバ
 - GPIO4／GPIO5のI2C機能設定
 - I2Cデバイス検索コマンド
+- ADT7410温度センサードライバと診断コマンド
+- Grove RGB LCD Backlight V5.0ドライバ
+- ADT7410温度のLCD周期表示タスク
+- セマフォによるI2C0のタスク間排他制御
 
 ## UART受信割り込みの実装段階
 
@@ -1554,8 +1618,8 @@ xdg-open docs/doxygen/html/index.html
 - UART受信割り込み処理の改善
 - GDBを使ったREADYキュー、WAITキュー、タスク状態、例外処理の確認
 - TryKernel内部の理解を進めながら、必要な機能を段階的に追加
-- I2Cバスのタスク間排他制御
-- I2Cセンサータスクの追加
+- I2C通信タイムアウト後のバス回復処理
+- LCD温度表示タスクの開始・停止コマンド
 
 ## 参考資料
 
@@ -1563,6 +1627,8 @@ xdg-open docs/doxygen/html/index.html
 - [RP2040 Datasheet（Raspberry Pi公式）](https://pip.raspberrypi.com/documents/RP-008371-DS-rp2040-datasheet.pdf)
 - [Raspberry Pi Pico SDK I2C bus scan example](https://github.com/raspberrypi/pico-examples/blob/master/i2c/bus_scan/bus_scan.c)
 - [ADT7410 Data Sheet（Analog Devices公式）](https://www.analog.com/media/en/technical-documentation/data-sheets/ADT7410.pdf)
+- [Grove LCD RGB Backlight（Seeed Studio公式）](https://wiki.seeedstudio.com/Grove-LCD_RGB_Backlight/)
+- [Grove LCD RGB Backlight V5.0 Data Sheet](https://files.seeedstudio.com/wiki/Grove-LCD_RGB_Backlight/Grove-LCD_RGB_Backlight_V5.0_Datasheet.pdf)
 
 ## ライセンスと原典について
 
