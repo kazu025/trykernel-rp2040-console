@@ -28,6 +28,38 @@
 #define GROVE_RGB_REG_GREEN      0x07U      // GREEN レジスタ
 #define GROVE_RGB_REG_BLUE       0x08U      // BLUE レジスタ
 
+static ID grove_lcd_semid;
+
+static BOOL grove_lcd_lock(void)
+{
+    if(grove_lcd_semid <= 0){
+        return FALSE;
+    }
+
+    return (tk_wai_sem(grove_lcd_semid, 1, TMO_FEVR) == E_OK);
+}
+
+static BOOL grove_lcd_unlock(void)
+{
+    return (tk_sig_sem(grove_lcd_semid, 1) == E_OK);
+}
+
+ER grove_lcd_sync_init(void)
+{
+    T_CSEM csem;
+
+    csem.sematr = TA_TFIFO | TA_FIRST;
+    csem.isemcnt = 1;
+    csem.maxsem = 1;
+
+    grove_lcd_semid = tk_cre_sem(&csem);
+    if(grove_lcd_semid < E_OK){
+        return (ER)grove_lcd_semid;
+    }
+
+    return E_OK;
+}
+
 // I2Cコマンド送信
 static BOOL grove_lcd_write_pair(UB address, UB first, UB second)
 {
@@ -40,7 +72,7 @@ static BOOL grove_lcd_write_pair(UB address, UB first, UB second)
 }
 
 // 文字表示を制御する
-static BOOL grove_lcd_command(UB command)
+static BOOL grove_lcd_command_unlocked(UB command)
 {
     return grove_lcd_write_pair(
         GROVE_LCD_ADDRESS,
@@ -50,7 +82,7 @@ static BOOL grove_lcd_command(UB command)
 }
 
 // RGBバックライト側を制御する
-static BOOL grove_rgb_write_register(UB reg, UB value)
+static BOOL grove_rgb_write_register_unlocked(UB reg, UB value)
 {
     return grove_lcd_write_pair(
         GROVE_RGB_ADDRESS_V5,
@@ -59,9 +91,9 @@ static BOOL grove_rgb_write_register(UB reg, UB value)
     );
 }
 // 画面クリアとカーソルを先頭に移動
-BOOL grove_lcd_clear(void)
+static BOOL grove_lcd_clear_unlocked(void)
 {
-    if(grove_lcd_command(GROVE_LCD_CMD_CLEAR) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_CLEAR) == FALSE){
         return FALSE;
     }
 
@@ -69,7 +101,7 @@ BOOL grove_lcd_clear(void)
     return TRUE;
 }
 // カーソル位置設定
-BOOL grove_lcd_set_cursor(UB column, UB row)
+static BOOL grove_lcd_set_cursor_unlocked(UB column, UB row)
 {
     UB address;
 
@@ -81,10 +113,10 @@ BOOL grove_lcd_set_cursor(UB column, UB row)
         ? (UB)(0x80U + column)
         : (UB)(0xC0U + column);
 
-    return grove_lcd_command(address);
+    return grove_lcd_command_unlocked(address);
 }
 // テキスト設定
-BOOL grove_lcd_write_text(const char *text)
+static BOOL grove_lcd_write_text_unlocked(const char *text)
 {
     if(text == NULL){
         return FALSE;
@@ -103,61 +135,156 @@ BOOL grove_lcd_write_text(const char *text)
     return TRUE;
 }
 // RGBバックライト色設定
-BOOL grove_lcd_set_rgb(UB red, UB green, UB blue)
+static BOOL grove_lcd_set_rgb_unlocked(UB red, UB green, UB blue)
 {
     /* 単独で呼び出しても動作するようRGBドライバを初期化する */
-    if(grove_rgb_write_register(GROVE_RGB_REG_RESET, 0x07U) == FALSE){
+    if(grove_rgb_write_register_unlocked(
+            GROVE_RGB_REG_RESET, 0x07U) == FALSE){
         return FALSE;
     }
     tk_dly_tsk(10);
 
-    if(grove_rgb_write_register(GROVE_RGB_REG_LEDOUT, 0x15U) == FALSE){
+    if(grove_rgb_write_register_unlocked(
+            GROVE_RGB_REG_LEDOUT, 0x15U) == FALSE){
         return FALSE;
     }
 
-    if(grove_rgb_write_register(GROVE_RGB_REG_RED, red) == FALSE){
+    if(grove_rgb_write_register_unlocked(GROVE_RGB_REG_RED, red) == FALSE){
         return FALSE;
     }
-    if(grove_rgb_write_register(GROVE_RGB_REG_GREEN, green) == FALSE){
+    if(grove_rgb_write_register_unlocked(
+            GROVE_RGB_REG_GREEN, green) == FALSE){
         return FALSE;
     }
-    if(grove_rgb_write_register(GROVE_RGB_REG_BLUE, blue) == FALSE){
+    if(grove_rgb_write_register_unlocked(GROVE_RGB_REG_BLUE, blue) == FALSE){
         return FALSE;
     }
 
     return TRUE;
 }
 // 初期化
-BOOL grove_lcd_init(void)
+static BOOL grove_lcd_init_unlocked(void)
 {
     /* LCD電源投入後の待ち時間 */
     tk_dly_tsk(50);
 
-    if(grove_lcd_command(GROVE_LCD_CMD_FUNCTION) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_FUNCTION) == FALSE){
         return FALSE;
     }
     tk_dly_tsk(10);
 
-    if(grove_lcd_command(GROVE_LCD_CMD_FUNCTION) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_FUNCTION) == FALSE){
         return FALSE;
     }
     tk_dly_tsk(10);
 
-    if(grove_lcd_command(GROVE_LCD_CMD_FUNCTION) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_FUNCTION) == FALSE){
         return FALSE;
     }
-    if(grove_lcd_command(GROVE_LCD_CMD_FUNCTION) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_FUNCTION) == FALSE){
         return FALSE;
     }
-    if(grove_lcd_command(GROVE_LCD_CMD_DISPLAY_ON) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_DISPLAY_ON) == FALSE){
         return FALSE;
     }
-    if(grove_lcd_clear() == FALSE){
+    if(grove_lcd_clear_unlocked() == FALSE){
         return FALSE;
     }
-    if(grove_lcd_command(GROVE_LCD_CMD_ENTRY_MODE) == FALSE){
+    if(grove_lcd_command_unlocked(GROVE_LCD_CMD_ENTRY_MODE) == FALSE){
         return FALSE;
     }
 
-    return grove_lcd_set_rgb(64U, 128U, 255U);
+    return grove_lcd_set_rgb_unlocked(64U, 128U, 255U);
+}
+
+BOOL grove_lcd_init(void)
+{
+    BOOL result;
+
+    if(grove_lcd_lock() == FALSE){
+        return FALSE;
+    }
+    result = grove_lcd_init_unlocked();
+    if(grove_lcd_unlock() == FALSE){
+        return FALSE;
+    }
+    return result;
+}
+
+BOOL grove_lcd_clear(void)
+{
+    BOOL result;
+
+    if(grove_lcd_lock() == FALSE){
+        return FALSE;
+    }
+    result = grove_lcd_clear_unlocked();
+    if(grove_lcd_unlock() == FALSE){
+        return FALSE;
+    }
+    return result;
+}
+
+BOOL grove_lcd_set_cursor(UB column, UB row)
+{
+    BOOL result;
+
+    if(grove_lcd_lock() == FALSE){
+        return FALSE;
+    }
+    result = grove_lcd_set_cursor_unlocked(column, row);
+    if(grove_lcd_unlock() == FALSE){
+        return FALSE;
+    }
+    return result;
+}
+
+BOOL grove_lcd_write_text(const char *text)
+{
+    BOOL result;
+
+    if(grove_lcd_lock() == FALSE){
+        return FALSE;
+    }
+    result = grove_lcd_write_text_unlocked(text);
+    if(grove_lcd_unlock() == FALSE){
+        return FALSE;
+    }
+    return result;
+}
+
+BOOL grove_lcd_update_lines(const char *first_line, const char *second_line)
+{
+    BOOL result;
+
+    if((first_line == NULL) || (second_line == NULL)){
+        return FALSE;
+    }
+    if(grove_lcd_lock() == FALSE){
+        return FALSE;
+    }
+
+    result = grove_lcd_set_cursor_unlocked(0U, 0U)
+        && grove_lcd_write_text_unlocked(first_line)
+        && grove_lcd_set_cursor_unlocked(0U, 1U)
+        && grove_lcd_write_text_unlocked(second_line);
+
+    if(grove_lcd_unlock() == FALSE){
+        return FALSE;
+    }
+    return result;
+}
+
+BOOL grove_lcd_set_rgb(UB red, UB green, UB blue)
+{
+    BOOL result;
+
+    if(grove_lcd_lock() == FALSE){
+        return FALSE;
+    }
+    result = grove_lcd_set_rgb_unlocked(red, green, blue);
+    if(grove_lcd_unlock() == FALSE){
+        return FALSE;
+    }
+    return result;
 }

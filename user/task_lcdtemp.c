@@ -247,10 +247,7 @@ void task_lcdtemp(INT stacd, void *exinf)
         pad_lcd_line(first_line);
         pad_lcd_line(second_line);
 
-        if(grove_lcd_set_cursor(0U, 0U) == FALSE
-                || grove_lcd_write_text(first_line) == FALSE
-                || grove_lcd_set_cursor(0U, 1U) == FALSE
-                || grove_lcd_write_text(second_line) == FALSE){
+        if(grove_lcd_update_lines(first_line, second_line) == FALSE){
             uart_tx_send("LCD sensor task write error\r\n");
         }
 

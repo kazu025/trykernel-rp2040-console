@@ -611,10 +611,7 @@ static void cmd_lcdtest(int argc, char *argv[])
         return;
     }
 
-    if(grove_lcd_set_cursor(0U, 0U) == FALSE
-            || grove_lcd_write_text("Try Kernel") == FALSE
-            || grove_lcd_set_cursor(0U, 1U) == FALSE
-            || grove_lcd_write_text("LCD test") == FALSE){
+    if(grove_lcd_update_lines("Try Kernel", "LCD test") == FALSE){
         uart_tx_send("Grove LCD write error\r\n");
         return;
     }
@@ -684,10 +681,9 @@ static void cmd_lcdtemp(int argc, char *argv[])
         return;
     }
 
-    if(grove_lcd_set_cursor(0U, 0U) == FALSE
-            || grove_lcd_write_text("ADT7410 Temp    ") == FALSE
-            || grove_lcd_set_cursor(0U, 1U) == FALSE
-            || grove_lcd_write_text(temperature_line) == FALSE){
+    if(grove_lcd_update_lines(
+            "ADT7410 Temp    ",
+            temperature_line) == FALSE){
         uart_tx_send("Grove LCD write error\r\n");
         return;
     }
