@@ -10,6 +10,7 @@
 
 extern void dispatch_entry(void);       /* ディスパッチャ */
 extern void uart0_irq_handler(void);    /* UART0受信割り込み */
+extern void io_irq_bank0_handler(void); /* GPIO割り込み */
 /* デフォルトハンドラ */
 void Default_Handler(void)
 {
@@ -47,7 +48,7 @@ void (* const vector_tbl[])() __attribute__((section(".vector"))) = {
     Default_Handler,            // IRQ 10
     Default_Handler,            // IRQ 11
     Default_Handler,            // IRQ 12
-    Default_Handler,            // IRQ 13
+    io_irq_bank0_handler,       // IRQ 13: IO_BANK0
     Default_Handler,            // IRQ 14
     Default_Handler,            // IRQ 15
     Default_Handler,            // IRQ 16

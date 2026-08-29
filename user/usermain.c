@@ -6,6 +6,7 @@
 #include "task_lcdtemp.h"
 #include "i2c.h"
 #include "grove_lcd.h"
+#include "task_mpuirq.h"
 
 /*
  * タスク優先度:1〜16
@@ -17,6 +18,7 @@
 #define PRIORITY_LOG_A      8
 #define PRIORITY_LOG_B      10
 #define PRIORITY_LCDTEMP    11
+#define PRIORITY_MPUIRQ      9
 /*
  * stack size
  */
@@ -26,6 +28,7 @@
 #define STACK_LOG_A     1024
 #define STACK_LOG_B     1024
 #define STACK_LCDTEMP   1024
+#define STACK_MPUIRQ    1024
 /*
  * tk_set_flg() scheduler呼び出し確認用
  */
@@ -187,6 +190,16 @@ T_CTSK  ctsk_lcdtemp = {
     .bufptr     = tskstk_lcdtemp,
 };
 
+UW tskstk_mpuirq[STACK_MPUIRQ/sizeof(UW)];
+ID tskid_mpuirq;
+T_CTSK ctsk_mpuirq = {
+    .tskatr     = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task       = task_mpuirq,
+    .itskpri    = PRIORITY_MPUIRQ,
+    .stksz      = STACK_MPUIRQ,
+    .bufptr     = tskstk_mpuirq,
+};
+
 
 int usermain(void)
 {
@@ -218,6 +231,10 @@ int usermain(void)
         return (int)ercd;
     }
     ercd = task_uartrx_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
+    ercd = task_mpuirq_init();
     if(ercd < E_OK){
         return (int)ercd;
     }
@@ -265,6 +282,12 @@ int usermain(void)
         return (int)tskid_lcdtemp;
     }
     tk_sta_tsk(tskid_lcdtemp, 0);
+
+    tskid_mpuirq = tk_cre_tsk(&ctsk_mpuirq);
+    if(tskid_mpuirq < E_OK){
+        return (int)tskid_mpuirq;
+    }
+    tk_sta_tsk(tskid_mpuirq, 0);
 
 #if ENABLE_FLGTEST
     tskid_flgtest_a = tk_cre_tsk(&ctsk_flgtest_a);

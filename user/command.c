@@ -10,6 +10,7 @@
 #include "mpu6050.h"
 #include "grove_lcd.h"
 #include "task_lcdtemp.h"
+#include "task_mpuirq.h"
 
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
@@ -29,6 +30,7 @@ static void cmd_mpuid(int argc, char *argv[]);
 static void cmd_mpuraw(int argc, char *argv[]);
 static void cmd_mpu(int argc, char *argv[]);
 static void cmd_mpucal(int argc, char *argv[]);
+static void cmd_mpuirq(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
@@ -58,6 +60,7 @@ static const command_t command_table[] = {
     {"mpuraw", cmd_mpuraw, "show MPU-6050 raw sensor data"},
     {"mpu", cmd_mpu, "show acceleration, gyro and temperature"},
     {"mpucal", cmd_mpucal, "calibrate MPU gyro while stationary"},
+    {"mpuirq", cmd_mpuirq, "show MPU data ready IRQ status"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
     {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"},
@@ -637,6 +640,62 @@ static void cmd_mpucal(int argc, char *argv[])
         offset_y,
         offset_z
     );
+}
+
+static void cmd_mpuirq(int argc, char *argv[])
+{
+    const char *operation;
+    const char *stage;
+
+    (void)argc;
+    (void)argv;
+
+    uart_tx_printf("MPU GPIO IRQ count: %u\r\n", (UINT)gpio_irq_count_get());
+    uart_tx_printf(
+        "MPU sample count: %u\r\n",
+        (UINT)task_mpuirq_sample_count_get()
+    );
+    uart_tx_printf(
+        "MPU IRQ error count: %u\r\n",
+        (UINT)task_mpuirq_error_count_get()
+    );
+    uart_tx_printf(
+        "I2C error count: %u\r\n",
+        (UINT)i2c0_error_count_get()
+    );
+    uart_tx_printf(
+        "I2C recovery count: %u\r\n",
+        (UINT)i2c0_recovery_count_get()
+    );
+
+    operation = (i2c0_last_error_operation_get() == 1U)
+        ? "write" : "write-read";
+    if(i2c0_last_error_stage_get() == 1U){
+        stage = "disable";
+    }else if(i2c0_last_error_stage_get() == 2U){
+        stage = "enable";
+    }else if(i2c0_last_error_stage_get() == 3U){
+        stage = "tx";
+    }else if(i2c0_last_error_stage_get() == 4U){
+        stage = "rx";
+    }else if(i2c0_last_error_stage_get() == 5U){
+        stage = "stop";
+    }else{
+        stage = "none";
+    }
+
+    if(i2c0_error_count_get() != 0U){
+        uart_tx_printf(
+            "Last I2C error: addr=0x%x op=%s stage=%s\r\n",
+            (UINT)i2c0_last_error_address_get(),
+            operation,
+            stage
+        );
+        uart_tx_printf(
+            "I2C TX_ABRT_SOURCE: 0x%x\r\n",
+            (UINT)i2c0_last_abort_source_get()
+        );
+    }
 }
 
 static void cmd_lcdtest(int argc, char *argv[])

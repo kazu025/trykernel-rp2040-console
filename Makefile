@@ -59,6 +59,7 @@ C_SRCS  := \
 	drivers/uart.c \
 	user/task_led.c	\
 	user/task_lcdtemp.c \
+	user/task_mpuirq.c \
 	user/task_uartrx.c \
 	user/usermain.c \
 	user/command.c \

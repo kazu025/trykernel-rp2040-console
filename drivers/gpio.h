@@ -11,6 +11,11 @@ void gpio_clear(unsigned int pin);
 void gpio_toggle(unsigned int pin);
 void gpio_put(unsigned int pin, int value);
 
+typedef void (*GPIO_IRQ_NOTIFY_FUNC)(void);
+BOOL gpio_irq_init_rising(unsigned int pin, GPIO_IRQ_NOTIFY_FUNC notify);
+UW gpio_irq_count_get(void);
+void io_irq_bank0_handler(void);
+
 /* --- Pico Onboard LED --- */
 #define PICO_LED_PIN 25
 void led25_init(void);

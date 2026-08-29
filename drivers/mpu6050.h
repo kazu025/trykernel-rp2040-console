@@ -21,6 +21,8 @@ BOOL mpu6050_read_who_am_i(UB *device_id);
 BOOL mpu6050_is_supported_device(UB device_id);
 BOOL mpu6050_init(void);
 BOOL mpu6050_read_raw(mpu6050_raw_data_t *raw_data);
+BOOL mpu6050_enable_data_ready_interrupt(void);
+BOOL mpu6050_read_interrupt_status(UB *status);
 BOOL mpu6050_calibrate_gyro(
     UINT sample_count,
     RELTIM sample_period,
