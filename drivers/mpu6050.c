@@ -9,6 +9,10 @@
 #define MPU6050_REG_PWR_MGMT_1    0x6BU
 #define MPU6050_REG_WHO_AM_I      0x75U
 
+static INT mpu6050_gyro_offset_x;
+static INT mpu6050_gyro_offset_y;
+static INT mpu6050_gyro_offset_z;
+
 /*
  * 8ビットレジスタへ1つ書き込む
  */
@@ -107,6 +111,87 @@ BOOL mpu6050_read_raw(mpu6050_raw_data_t *raw_data)
     raw_data->gyro_x = mpu6050_decode_s16(data[8], data[9]);
     raw_data->gyro_y = mpu6050_decode_s16(data[10], data[11]);
     raw_data->gyro_z = mpu6050_decode_s16(data[12], data[13]);
+
+    return TRUE;
+}
+
+/*
+ * 静止中のジャイロ生データを平均し、ゼロ点オフセットとして保存する
+ */
+BOOL mpu6050_calibrate_gyro(
+    UINT sample_count,
+    RELTIM sample_period,
+    INT *offset_x,
+    INT *offset_y,
+    INT *offset_z
+)
+{
+    mpu6050_raw_data_t raw_data;
+    D sum_x = 0;
+    D sum_y = 0;
+    D sum_z = 0;
+
+    if((sample_count == 0U)
+            || (offset_x == NULL)
+            || (offset_y == NULL)
+            || (offset_z == NULL)){
+        return FALSE;
+    }
+
+    if(mpu6050_init() == FALSE){
+        return FALSE;
+    }
+
+    for(UINT i = 0U; i < sample_count; i++){
+        if(mpu6050_read_raw(&raw_data) == FALSE){
+            return FALSE;
+        }
+
+        sum_x += raw_data.gyro_x;
+        sum_y += raw_data.gyro_y;
+        sum_z += raw_data.gyro_z;
+
+        if((sample_period > 0) && ((i + 1U) < sample_count)){
+            if(tk_dly_tsk(sample_period) < E_OK){
+                return FALSE;
+            }
+        }
+    }
+
+    mpu6050_gyro_offset_x = (INT)(sum_x / (D)sample_count);
+    mpu6050_gyro_offset_y = (INT)(sum_y / (D)sample_count);
+    mpu6050_gyro_offset_z = (INT)(sum_z / (D)sample_count);
+
+    *offset_x = mpu6050_gyro_offset_x;
+    *offset_y = mpu6050_gyro_offset_y;
+    *offset_z = mpu6050_gyro_offset_z;
+
+    return TRUE;
+}
+
+/*
+ * 保存済みゼロ点オフセットを適用してミリdpsへ変換する
+ */
+BOOL mpu6050_get_gyro_milli_dps(
+    const mpu6050_raw_data_t *raw_data,
+    INT *gyro_x_milli_dps,
+    INT *gyro_y_milli_dps,
+    INT *gyro_z_milli_dps
+)
+{
+    if((raw_data == NULL)
+            || (gyro_x_milli_dps == NULL)
+            || (gyro_y_milli_dps == NULL)
+            || (gyro_z_milli_dps == NULL)){
+        return FALSE;
+    }
+
+    *gyro_x_milli_dps =
+        ((raw_data->gyro_x - mpu6050_gyro_offset_x) * 1000) / 131;
+    *gyro_y_milli_dps =
+        ((raw_data->gyro_y - mpu6050_gyro_offset_y) * 1000) / 131;
+    *gyro_z_milli_dps =
+        ((raw_data->gyro_z - mpu6050_gyro_offset_z) * 1000) / 131;
 
     return TRUE;
 }
