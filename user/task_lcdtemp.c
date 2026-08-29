@@ -214,6 +214,7 @@ void task_lcdtemp(INT stacd, void *exinf)
     char first_line[GROVE_LCD_COLUMNS + 1U];
     char second_line[GROVE_LCD_COLUMNS + 1U];
     BOOL initialized = FALSE;
+    BOOL write_error_reported = FALSE;
 
     (void)stacd;
     (void)exinf;
@@ -252,7 +253,12 @@ void task_lcdtemp(INT stacd, void *exinf)
         pad_lcd_line(second_line);
 
         if(grove_lcd_update_lines(first_line, second_line) == FALSE){
-            uart_tx_send("LCD sensor task write error\r\n");
+            if(write_error_reported == FALSE){
+                uart_tx_send("LCD sensor task write error\r\n");
+                write_error_reported = TRUE;
+            }
+        }else{
+            write_error_reported = FALSE;
         }
 
         tk_dly_tsk(LCDTEMP_UPDATE_PERIOD);

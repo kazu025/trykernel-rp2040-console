@@ -5,6 +5,12 @@
 
 extern void out_w(UW addr, UW data);
 extern UW in_w(UW addr);
+
+static unsigned int gpio_irq_pin;
+static UW gpio_irq_group;
+static UW gpio_irq_mask;
+static GPIO_IRQ_NOTIFY_FUNC gpio_irq_notify;
+static volatile UW gpio_irq_count;
 /*
  * GPIO pin munber check
  * pin : 0〜29
@@ -67,6 +73,63 @@ void gpio_put(unsigned int pin, int value){
         out_w(GPIO_OUT_SET, 1U<<pin);
     }else{
         out_w(GPIO_OUT_CLR, 1U<<pin);
+    }
+}
+
+BOOL gpio_irq_init_rising(unsigned int pin, GPIO_IRQ_NOTIFY_FUNC notify)
+{
+    UW pad;
+    UW shift;
+    UW intsts;
+
+    if(!gpio_is_valid(pin) || (notify == NULL)){
+        return FALSE;
+    }
+
+    gpio_reset_release();
+    gpio_irq_pin = pin;
+    gpio_irq_group = pin / 8U;
+    shift = (pin % 8U) * 4U;
+    gpio_irq_mask = 1UL << (shift + 3U);
+    gpio_irq_notify = notify;
+    gpio_irq_count = 0U;
+
+    out_w(GPIO_CTRL(pin), GPIO_CTRL_FUNCSEL_SIO);
+    out_w(GPIO_OE_CLR, 1UL << pin);
+    pad = in_w(GPIO(pin));
+    pad |= GPIO_IE | GPIO_PDE;
+    pad &= ~(GPIO_OD | GPIO_PUE);
+    out_w(GPIO(pin), pad);
+
+    DI(intsts);
+    out_w(IO_BANK0_INTR(gpio_irq_group), gpio_irq_mask);
+    out_w(
+        IO_BANK0_PROC0_INTE(gpio_irq_group),
+        in_w(IO_BANK0_PROC0_INTE(gpio_irq_group)) | gpio_irq_mask
+    );
+    out_w(NVIC_ICPR, IO_IRQ_BANK0_MASK);
+    out_w(NVIC_ISER, IO_IRQ_BANK0_MASK);
+    EI(intsts);
+
+    return TRUE;
+}
+
+UW gpio_irq_count_get(void)
+{
+    return gpio_irq_count;
+}
+
+void io_irq_bank0_handler(void)
+{
+    UW status;
+
+    status = in_w(IO_BANK0_PROC0_INTS(gpio_irq_group));
+    if((status & gpio_irq_mask) != 0U){
+        out_w(IO_BANK0_INTR(gpio_irq_group), gpio_irq_mask);
+        gpio_irq_count++;
+        if(gpio_irq_notify != NULL){
+            gpio_irq_notify();
+        }
     }
 }
 /*

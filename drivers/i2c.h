@@ -9,6 +9,12 @@
 void i2c0_init(void);
 ER i2c0_sync_init(void);
 BOOL i2c0_probe(UB addr);
+UW i2c0_error_count_get(void);
+UW i2c0_recovery_count_get(void);
+UB i2c0_last_error_address_get(void);
+UB i2c0_last_error_operation_get(void);
+UB i2c0_last_error_stage_get(void);
+UW i2c0_last_abort_source_get(void);
 BOOL i2c0_write(
     UB addr,
     const UB *data,

@@ -6,6 +6,10 @@
 #include "mpu6050.h"
 
 #define MPU6050_REG_ACCEL_XOUT_H  0x3BU
+#define MPU6050_REG_INT_STATUS    0x3AU
+#define MPU6050_REG_SMPLRT_DIV    0x19U
+#define MPU6050_REG_CONFIG        0x1AU
+#define MPU6050_REG_INT_ENABLE    0x38U
 #define MPU6050_REG_PWR_MGMT_1    0x6BU
 #define MPU6050_REG_WHO_AM_I      0x75U
 
@@ -24,6 +28,15 @@ static BOOL mpu6050_write_register(UB register_address, UB value)
     data[1] = value;
 
     return i2c0_write(MPU6050_I2C_ADDR, data, 2U);
+}
+
+static BOOL mpu6050_read_register(UB register_address, UB *value)
+{
+    if(value == NULL){
+        return FALSE;
+    }
+    return i2c0_write_read(
+        MPU6050_I2C_ADDR, &register_address, 1U, value, 1U);
 }
 
 /*
@@ -80,6 +93,20 @@ BOOL mpu6050_is_supported_device(UB device_id)
 BOOL mpu6050_init(void)
 {
     return mpu6050_write_register(MPU6050_REG_PWR_MGMT_1, 0x00U);
+}
+
+// MPU測定完了を10HzでINT端子から通知する
+BOOL mpu6050_enable_data_ready_interrupt(void)
+{
+    /* DLPF有効時の1kHz出力を100分周して10Hzにする */
+    return mpu6050_write_register(MPU6050_REG_CONFIG, 0x03U)    // ディジタルローパスフィルタ：ノイズを抑える
+        && mpu6050_write_register(MPU6050_REG_SMPLRT_DIV, 99U)  // 10Hz
+        && mpu6050_write_register(MPU6050_REG_INT_ENABLE, 0x01U); // 割り込み有効
+}
+// 割り込み発生要因を取得
+BOOL mpu6050_read_interrupt_status(UB *status)
+{
+    return mpu6050_read_register(MPU6050_REG_INT_STATUS, status);
 }
 
 /*

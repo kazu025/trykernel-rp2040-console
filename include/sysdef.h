@@ -65,6 +65,9 @@
 /* GPIO */
 #define IO_BANK0_BASE           0x40014000
 #define	GPIO_CTRL(n)            (IO_BANK0_BASE+0x04+(n*8))
+#define IO_BANK0_INTR(n)        (IO_BANK0_BASE+0xF0+((n)*4))
+#define IO_BANK0_PROC0_INTE(n)  (IO_BANK0_BASE+0x100+((n)*4))
+#define IO_BANK0_PROC0_INTS(n)  (IO_BANK0_BASE+0x120+((n)*4))
 
 #define	GPIO_CTRL_FUNCSEL_I2C   3
 #define GPIO_CTRL_FUNCSEL_SIO   5
@@ -234,6 +237,8 @@
 
 #define UART0_IRQ_NUM           20
 #define UART0_IRQ_MASK          (1UL << UART0_IRQ_NUM)
+#define IO_IRQ_BANK0_NUM        13
+#define IO_IRQ_BANK0_MASK       (1UL << IO_IRQ_BANK0_NUM)
 
 #define	INTLEVEL_0              (0x00)
 #define	INTLEVEL_1              (0x40)
