@@ -70,12 +70,16 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - I2C0のレジスタレベル・ドライバ
 - GPIO4／GPIO5を使用したI2C通信
 - I2Cデバイス検索コマンド
+- I2C通信失敗時のバス復旧と1回再試行
+- I2Cエラー回数、復旧回数、直近エラーの診断情報
 - ADT7410温度センサードライバ
 - ADT7410温度取得コマンド
 - Grove RGB LCD Backlight V5.0ドライバ
 - ADT7410温度のLCD周期表示タスク
 - UARTコマンドによるRGBバックライト色設定
 - バイナリセマフォによるI2C0のタスク間排他制御
+- GPIO6によるMPU Data Ready割り込み
+- イベントフラグによるMPU割り込み処理タスクの起床
 
 ## UARTの構成
 
@@ -315,13 +319,14 @@ GPIO4とGPIO5では内部プルアップを有効にしていますが、安定�
 
 `i2cscan`コマンドは、予約アドレスを除く`0x08`から`0x77`までを走査します。各アドレスへ`0x00`を1バイト書き込み、ACKが返されたアドレスを表示します。
 
-Grove LCDの文字表示コントローラは読み出しに対応しないため、ダミー読み出しによる検索は使用していません。現在の接続では次の3デバイスを検出します。
+Grove LCDの文字表示コントローラは読み出しに対応しないため、ダミー読み出しによる検索は使用していません。現在の接続では次の4デバイスを検出します。
 
 | アドレス | デバイス |
 |---|---|
 | `0x30` | Grove LCD V5.0 RGBバックライト制御 |
 | `0x3E` | Grove LCD文字表示コントローラ |
 | `0x48` | ADT7410温度センサー |
+| `0x68` | MPU-6050／MPU-6500互換モーションセンサー |
 
 ```text
 I2C0初期化
@@ -355,6 +360,24 @@ tk_sig_sem()
 ```
 
 公開APIの`i2c0_write()`、`i2c0_write_read()`、`i2c0_probe()`がセマフォを獲得・返却します。従来のレジスタ操作部分は内部の`*_unlocked()`関数として分離し、通信途中でエラーになった場合でも公開API側でセマフォを返却します。
+
+### I2Cバスの自動復旧と診断
+
+通常の書き込みまたは書き込み後読み出しに失敗した場合は、I2Cコントローラを一度停止し、GPIOへ切り替えたSCLを9回駆動してからSTOP条件を生成します。その後I2C0を再初期化し、失敗した通信を1回だけ再試行します。`i2cscan`の探索中に発生する想定内のNACKでは復旧処理を行いません。
+
+```text
+I2C通信に失敗
+    ↓
+エラー内容を記録
+    ↓
+SCLを9回駆動してSTOP条件を生成
+    ↓
+I2C0を再初期化
+    ↓
+失敗した通信を1回再試行
+```
+
+診断情報として、I2Cエラー回数、復旧回数、直近の対象アドレス、操作、失敗段階、RP2040の`TX_ABRT_SOURCE`を保持します。MPU割り込みの状態とともに`mpuirq`コマンドで確認できます。
 
 ### ADT7410温度取得
 
@@ -457,6 +480,37 @@ Temperature:  30.153 C
 Keep the MPU sensor still...
 MPU gyro calibration complete
 Gyro offset raw: X=162 Y=-168 Z=-46
+```
+
+### MPU Data Ready GPIO割り込み
+
+MPUのINT端子をGPIO6（物理ピン9）へ接続します。MPU側ではDLPF有効時の1kHz出力を100分周して10Hzとし、サンプルが更新されるたびにData Ready割り込みを発生させます。
+
+```text
+MPUのサンプル更新（10Hz）
+        ↓
+INT端子がHigh
+        ↓
+GPIO6立ち上がり割り込み
+        ↓
+割り込みハンドラがイベントフラグをセット
+        ↓
+MPU割り込み処理タスクがWAITからREADYへ移行
+        ↓
+INT_STATUSとセンサーデータを読み出す
+```
+
+GPIO割り込みハンドラではI2C通信を行わず、割り込み要因のクリア、カウンター更新、タスクへの通知だけを行います。I2Cによるセンサー読み出しは、イベントフラグで起床したタスク側で実行します。
+
+`mpuirq`コマンドは、GPIO割り込み回数、取得成功回数、MPU割り込み処理エラー、I2Cエラーと復旧回数を表示します。
+
+```text
+> mpuirq
+MPU GPIO IRQ count: 38734
+MPU sample count: 38734
+MPU IRQ error count: 0
+I2C error count: 0
+I2C recovery count: 0
 ```
 
 ## 必要な環境
@@ -575,6 +629,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `mpuraw` | MPUセンサーの加速度・温度・ジャイロ生データを表示 |
 | `mpu` | MPUセンサーの値をg、dps、℃へ換算して表示 |
 | `mpucal` | 静止状態からジャイロのゼロ点を補正 |
+| `mpuirq` | MPU GPIO割り込みとI2C復旧の診断情報を表示 |
 | `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
 | `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
 | `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
@@ -607,6 +662,7 @@ commands:
    mpuraw -  show MPU-6050 raw sensor data
    mpu -  show acceleration, gyro and temperature
    mpucal -  calibrate MPU gyro while stationary
+   mpuirq -  show MPU GPIO IRQ and I2C diagnostics
    lcdtest -  test Grove RGB LCD V5.0
    lcdtemp -  show ADT7410 temperature on LCD
    lcdcolor -  set LCD backlight: R G B
@@ -631,14 +687,15 @@ Scanning I2C bus...
 Found device at 0x30
 Found device at 0x3e
 Found device at 0x48
-I2C scan complete. Found 3 device(s).
+Found device at 0x68
+I2C scan complete. Found 4 device(s).
 > temperature
 ADT7410 temperature: 25.250 C
 > temperature
 ADT7410 temperature: 25.313 C
 ```
 
-上記の例では、Grove LCDの`0x30`と`0x3E`、ADT7410の`0x48`を検出し、温度を取得しています。ADT7410の13ビットモードの分解能は`0.0625℃`であるため、表示値は約`0.063℃`単位で変化します。
+上記の例では、Grove LCDの`0x30`と`0x3E`、ADT7410の`0x48`、MPUの`0x68`を検出し、温度を取得しています。ADT7410の13ビットモードの分解能は`0.0625℃`であるため、表示値は約`0.063℃`単位で変化します。
 
 起動時に次のように表示される場合があります。
 
@@ -657,6 +714,7 @@ ADT7410 temperature: 25.313 C
 | UART RX | 4 | イベント待ち、リングバッファ読み出し、コンソール入力 |
 | UART TX | 6 | 送信キューの取り出しとUART出力 |
 | UART Log A | 8 | 送信競合テスト用ログ |
+| MPU IRQ | 9 | Data Readyイベント待ち、MPUセンサーデータ取得 |
 | UART Log B | 10 | 送信競合テスト用ログ |
 | LCD Temperature | 11 | ADT7410温度のLCD周期表示 |
 | LED | 12 | LEDの点灯・消灯・点滅 |
