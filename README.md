@@ -450,6 +450,15 @@ Gyroscope:    X=1.236 dps Y=-1.282 dps Z=-0.351 dps
 Temperature:  30.153 C
 ```
 
+`mpucal`は、静止中のジャイロを200回測定して平均し、X、Y、Z各軸のゼロ点オフセットとしてRAMへ保存します。補正値は`mpu`コマンドと周期LCDジャイロ表示へ適用され、電源を切るとリセットされます。加速度の6面補正は行いません。
+
+```text
+> mpucal
+Keep the MPU sensor still...
+MPU gyro calibration complete
+Gyro offset raw: X=162 Y=-168 Z=-46
+```
+
 ## 必要な環境
 
 Linux MintまたはUbuntu系Linuxを想定しています。
@@ -565,6 +574,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `mpuid` | MPUセンサーのWHO_AM_Iと機種を表示 |
 | `mpuraw` | MPUセンサーの加速度・温度・ジャイロ生データを表示 |
 | `mpu` | MPUセンサーの値をg、dps、℃へ換算して表示 |
+| `mpucal` | 静止状態からジャイロのゼロ点を補正 |
 | `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
 | `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
 | `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
@@ -596,6 +606,7 @@ commands:
    mpuid -  show MPU-6050 WHO_AM_I
    mpuraw -  show MPU-6050 raw sensor data
    mpu -  show acceleration, gyro and temperature
+   mpucal -  calibrate MPU gyro while stationary
    lcdtest -  test Grove RGB LCD V5.0
    lcdtemp -  show ADT7410 temperature on LCD
    lcdcolor -  set LCD backlight: R G B

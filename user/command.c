@@ -28,6 +28,7 @@ static void cmd_adtraw(int argc, char *argv[]);
 static void cmd_mpuid(int argc, char *argv[]);
 static void cmd_mpuraw(int argc, char *argv[]);
 static void cmd_mpu(int argc, char *argv[]);
+static void cmd_mpucal(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
@@ -56,6 +57,7 @@ static const command_t command_table[] = {
     {"mpuid", cmd_mpuid, "show MPU-6050 WHO_AM_I"},
     {"mpuraw", cmd_mpuraw, "show MPU-6050 raw sensor data"},
     {"mpu", cmd_mpu, "show acceleration, gyro and temperature"},
+    {"mpucal", cmd_mpucal, "calibrate MPU gyro while stationary"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
     {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"},
@@ -555,9 +557,14 @@ static void cmd_mpu(int argc, char *argv[])
     accel_x_milli_g = (raw_data.accel_x * 1000) / 16384;
     accel_y_milli_g = (raw_data.accel_y * 1000) / 16384;
     accel_z_milli_g = (raw_data.accel_z * 1000) / 16384;
-    gyro_x_milli_dps = (raw_data.gyro_x * 1000) / 131;
-    gyro_y_milli_dps = (raw_data.gyro_y * 1000) / 131;
-    gyro_z_milli_dps = (raw_data.gyro_z * 1000) / 131;
+    if(mpu6050_get_gyro_milli_dps(
+            &raw_data,
+            &gyro_x_milli_dps,
+            &gyro_y_milli_dps,
+            &gyro_z_milli_dps) == FALSE){
+        uart_tx_send("MPU gyro conversion error\r\n");
+        return;
+    }
 
     if(device_id == MPU6500_WHO_AM_I){
         temperature_milli_c =
@@ -599,6 +606,37 @@ static void cmd_mpu(int argc, char *argv[])
         gyro_z_text
     );
     uart_tx_printf("Temperature:  %s\r\n", temperature_text);
+}
+
+static void cmd_mpucal(int argc, char *argv[])
+{
+    INT offset_x;
+    INT offset_y;
+    INT offset_z;
+
+    (void)argc;
+    (void)argv;
+
+    uart_tx_send("Keep the MPU sensor still...\r\n");
+    tk_dly_tsk(1000);
+
+    if(mpu6050_calibrate_gyro(
+            200U,
+            10,
+            &offset_x,
+            &offset_y,
+            &offset_z) == FALSE){
+        uart_tx_send("MPU gyro calibration error\r\n");
+        return;
+    }
+
+    uart_tx_send("MPU gyro calibration complete\r\n");
+    uart_tx_printf(
+        "Gyro offset raw: X=%d Y=%d Z=%d\r\n",
+        offset_x,
+        offset_y,
+        offset_z
+    );
 }
 
 static void cmd_lcdtest(int argc, char *argv[])

@@ -94,9 +94,13 @@ static BOOL read_mpu_values(
     *accel_x = (raw_data.accel_x * 1000) / 16384;
     *accel_y = (raw_data.accel_y * 1000) / 16384;
     *accel_z = (raw_data.accel_z * 1000) / 16384;
-    *gyro_x = (raw_data.gyro_x * 1000) / 131;
-    *gyro_y = (raw_data.gyro_y * 1000) / 131;
-    *gyro_z = (raw_data.gyro_z * 1000) / 131;
+    if(mpu6050_get_gyro_milli_dps(
+            &raw_data,
+            gyro_x,
+            gyro_y,
+            gyro_z) == FALSE){
+        return FALSE;
+    }
 
     return TRUE;
 }
