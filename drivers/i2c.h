@@ -7,6 +7,7 @@
 #define I2C0_SCL_PIN  5U
 
 void i2c0_init(void);
+ER i2c0_sync_init(void);
 BOOL i2c0_probe(UB addr);
 BOOL i2c0_write(
     UB addr,

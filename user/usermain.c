@@ -5,6 +5,7 @@
 #include "task_uartrx.h"
 #include "task_lcdtemp.h"
 #include "i2c.h"
+#include "grove_lcd.h"
 
 /*
  * タスク優先度:1〜16
@@ -192,6 +193,14 @@ int usermain(void)
     ER ercd;
     led25_init();   // PicoボードのLED初期化
     i2c0_init();   // I2C初期化
+    ercd = i2c0_sync_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
+    ercd = grove_lcd_sync_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
 #if ENABLE_FLGTEST
     if(create_flag() < E_OK){
         return -1;
