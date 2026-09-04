@@ -30,6 +30,14 @@ BOOL mpu6050_calibrate_gyro(
     INT *offset_y,
     INT *offset_z
 );
+BOOL mpu6050_calibrate_motion(
+    UINT sample_count,
+    RELTIM sample_period,
+    INT *offset_x,
+    INT *offset_y,
+    INT *offset_z,
+    long long *accel_magnitude_squared
+);
 BOOL mpu6050_get_gyro_milli_dps(
     const mpu6050_raw_data_t *raw_data,
     INT *gyro_x_milli_dps,

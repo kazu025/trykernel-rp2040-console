@@ -197,6 +197,68 @@ BOOL mpu6050_calibrate_gyro(
 }
 
 /*
+ * 静止中のジャイロ零点と加速度ベクトル長の基準値を求める
+ */
+BOOL mpu6050_calibrate_motion(
+    UINT sample_count,
+    RELTIM sample_period,
+    INT *offset_x,
+    INT *offset_y,
+    INT *offset_z,
+    long long *accel_magnitude_squared
+)
+{
+    mpu6050_raw_data_t raw_data;
+    long long gyro_sum_x = 0;
+    long long gyro_sum_y = 0;
+    long long gyro_sum_z = 0;
+    long long accel_magnitude_sum = 0;
+
+    if((sample_count == 0U)
+            || (offset_x == NULL)
+            || (offset_y == NULL)
+            || (offset_z == NULL)
+            || (accel_magnitude_squared == NULL)){
+        return FALSE;
+    }
+
+    if(mpu6050_init() == FALSE){
+        return FALSE;
+    }
+
+    for(UINT i = 0U; i < sample_count; i++){
+        if(mpu6050_read_raw(&raw_data) == FALSE){
+            return FALSE;
+        }
+
+        gyro_sum_x += raw_data.gyro_x;
+        gyro_sum_y += raw_data.gyro_y;
+        gyro_sum_z += raw_data.gyro_z;
+        accel_magnitude_sum +=
+            ((long long)raw_data.accel_x * raw_data.accel_x)
+            + ((long long)raw_data.accel_y * raw_data.accel_y)
+            + ((long long)raw_data.accel_z * raw_data.accel_z);
+
+        if((sample_period > 0) && ((i + 1U) < sample_count)){
+            if(tk_dly_tsk(sample_period) < E_OK){
+                return FALSE;
+            }
+        }
+    }
+
+    mpu6050_gyro_offset_x = (INT)(gyro_sum_x / sample_count);
+    mpu6050_gyro_offset_y = (INT)(gyro_sum_y / sample_count);
+    mpu6050_gyro_offset_z = (INT)(gyro_sum_z / sample_count);
+
+    *offset_x = mpu6050_gyro_offset_x;
+    *offset_y = mpu6050_gyro_offset_y;
+    *offset_z = mpu6050_gyro_offset_z;
+    *accel_magnitude_squared = accel_magnitude_sum / sample_count;
+
+    return TRUE;
+}
+
+/*
  * 保存済みゼロ点オフセットを適用してミリdpsへ変換する
  */
 BOOL mpu6050_get_gyro_milli_dps(

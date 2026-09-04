@@ -91,7 +91,7 @@ flowchart TD
     EVT["受信イベントフラグ"]
     RXT["UART受信タスク"]
     CON["コンソール<br/>コマンド処理"]
-    TXQ["固定長TXキュー<br/>16件 × 128バイト"]
+    TXQ["固定長TXキュー<br/>32件 × 128バイト"]
     TXT["UART送信タスク"]
     TXF["UART0 TX FIFO"]
 
@@ -482,6 +482,19 @@ MPU gyro calibration complete
 Gyro offset raw: X=162 Y=-168 Z=-46
 ```
 
+`motion`はUARTから3秒間の静定モードを開始します。静定中はセンサーを動かさないでください。ジャイロの零点と静止時の加速度ベクトル長を求めた後、自動的に10Hzの移動計測モードへ移行します。移動／停止の状態が変わった場合だけUARTへ通知します。
+
+```text
+> motion
+Motion settling mode started. Keep the MPU sensor still for 3 seconds...
+Motion settling complete
+Gyro offset raw: X=162 Y=-168 Z=-46
+Motion measurement mode started
+Motion: STOPPED
+Motion: MOVING
+Motion: STOPPED
+```
+
 ### MPU Data Ready GPIO割り込み
 
 MPUのINT端子をGPIO6（物理ピン9）へ接続します。MPU側ではDLPF有効時の1kHz出力を100分周して10Hzとし、サンプルが更新されるたびにData Ready割り込みを発生させます。
@@ -630,6 +643,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `mpu` | MPUセンサーの値をg、dps、℃へ換算して表示 |
 | `mpucal` | 静止状態からジャイロのゼロ点を補正 |
 | `mpuirq` | MPU GPIO割り込みとI2C復旧の診断情報を表示 |
+| `motion` | 3秒間静定してから移動計測モードを開始 |
 | `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
 | `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
 | `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
@@ -663,6 +677,7 @@ commands:
    mpu -  show acceleration, gyro and temperature
    mpucal -  calibrate MPU gyro while stationary
    mpuirq -  show MPU GPIO IRQ and I2C diagnostics
+   motion -  start motion measurement after 3-second settling
    lcdtest -  test Grove RGB LCD V5.0
    lcdtemp -  show ADT7410 temperature on LCD
    lcdcolor -  set LCD backlight: R G B
@@ -756,7 +771,7 @@ ADT7410 temperature: 25.313 C
 
 - RP2040のコア0だけを使用するシングルコア構成です。
 - UART受信リングバッファの配列サイズは128バイトです。
-- UART送信キューは16件です。
+- UART送信キューは32件です。
 - UART送信キューの1メッセージは、終端文字を含めて128バイトです。
 - 送信文字列は最大127文字で切り詰められます。
 - コンソールの改行入力は、現在CRのみを処理します。

@@ -31,6 +31,7 @@ static void cmd_mpuraw(int argc, char *argv[]);
 static void cmd_mpu(int argc, char *argv[]);
 static void cmd_mpucal(int argc, char *argv[]);
 static void cmd_mpuirq(int argc, char *argv[]);
+static void cmd_motion(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
@@ -61,6 +62,7 @@ static const command_t command_table[] = {
     {"mpu", cmd_mpu, "show acceleration, gyro and temperature"},
     {"mpucal", cmd_mpucal, "calibrate MPU gyro while stationary"},
     {"mpuirq", cmd_mpuirq, "show MPU data ready IRQ status"},
+    {"motion", cmd_motion, "start motion measurement after 3-second settling"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
     {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"},
@@ -660,6 +662,10 @@ static void cmd_mpuirq(int argc, char *argv[])
         (UINT)task_mpuirq_error_count_get()
     );
     uart_tx_printf(
+        "Motion measurement: %s\r\n",
+        (task_mpuirq_motion_is_enabled() != FALSE) ? "ON" : "OFF"
+    );
+    uart_tx_printf(
         "I2C error count: %u\r\n",
         (UINT)i2c0_error_count_get()
     );
@@ -696,6 +702,43 @@ static void cmd_mpuirq(int argc, char *argv[])
             (UINT)i2c0_last_abort_source_get()
         );
     }
+}
+
+static void cmd_motion(int argc, char *argv[])
+{
+    INT offset_x;
+    INT offset_y;
+    INT offset_z;
+    long long accel_reference_squared;
+
+    (void)argc;
+    (void)argv;
+
+    task_mpuirq_motion_stop();
+    uart_tx_send(
+        "Motion settling mode started. Keep the MPU sensor still for 3 seconds...\r\n");
+
+    if(mpu6050_calibrate_motion(
+            300U,
+            10,
+            &offset_x,
+            &offset_y,
+            &offset_z,
+            &accel_reference_squared) == FALSE){
+        uart_tx_send("Motion settling error\r\n");
+        return;
+    }
+
+    uart_tx_send("Motion settling complete\r\n");
+    uart_tx_printf(
+        "Gyro offset raw: X=%d Y=%d Z=%d\r\n",
+        offset_x,
+        offset_y,
+        offset_z
+    );
+    task_mpuirq_motion_start(accel_reference_squared);
+    uart_tx_send("Motion measurement mode started\r\n");
+    uart_tx_send("Motion: STOPPED\r\n");
 }
 
 static void cmd_lcdtest(int argc, char *argv[])

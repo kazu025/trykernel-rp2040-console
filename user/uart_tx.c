@@ -6,7 +6,7 @@
 /*
  * UART送信キュー設定　登録最大件数
  */
-#define UART_TX_QUEUE_SIZE      16U
+#define UART_TX_QUEUE_SIZE      32U
 
 /*
  * UART送信イベント
