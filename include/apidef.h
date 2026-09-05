@@ -81,4 +81,17 @@ ID tk_cre_sem( const T_CSEM *pk_csem );
 ER tk_sig_sem( ID semid, INT cnt );
 ER tk_wai_sem( ID semid, INT cnt, TMO tmout );
 
+/* 固定長メッセージキュー生成情報 */
+typedef struct t_cmsgq {
+    ATR     msgqatr;    // メッセージキュー属性
+    INT     msgsz;      // 1メッセージのサイズ
+    INT     maxmsg;     // 格納できるメッセージ数
+    void    *bufptr;    // メッセージ格納領域
+} T_CMSGQ;
+
+/* 固定長メッセージキュー API */
+ID tk_cre_msgq( const T_CMSGQ *pk_cmsgq );
+ER tk_snd_msgq( ID msgqid, const void *msg, TMO tmout );
+ER tk_rcv_msgq( ID msgqid, void *msg, TMO tmout );
+
 #endif  /* APIDEF_H */

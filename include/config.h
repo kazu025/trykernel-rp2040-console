@@ -10,5 +10,6 @@
 
 #define CNF_MAX_FLGID   8       /* 最大イベントフラグ数 */
 #define CNF_MAX_SEMID   8       /* 最大セマフォ数 */
+#define CNF_MAX_MSGQID  4       /* 最大メッセージキュー数 */
 
 #endif  /* CONFIG_H */

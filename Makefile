@@ -48,6 +48,7 @@ C_SRCS  := \
 	kernel/context.c \
 	kernel/eventflag.c \
 	kernel/inittsk.c \
+	kernel/message_queue.c \
 	kernel/scheduler.c \
 	kernel/systimer.c \
 	kernel/semaphore.c \
@@ -60,6 +61,7 @@ C_SRCS  := \
 	user/task_led.c	\
 	user/task_lcdtemp.c \
 	user/task_mpuirq.c \
+	user/task_msgtest.c \
 	user/task_uartrx.c \
 	user/usermain.c \
 	user/command.c \

@@ -21,6 +21,8 @@ typedef enum {
     TWFCT_SLP   = 2,    // tk_slp_tskによる起床待ち
     TWFCT_FLG   = 3,    // tk_wai_flgによるフラグ待ち
     TWFCT_SEM   = 4,    // tk_wai_semによる資源待ち
+    TWFCT_SND_MSGQ = 5, // tk_snd_msgqによる送信待ち
+    TWFCT_RCV_MSGQ = 6, // tk_rcv_msgqによる受信待ち
 } TWFCT;
 
 /* TCB(Task Control Block)定義 */
@@ -52,6 +54,10 @@ typedef struct st_tcb {
 
     /* セマフォ待ち情報 */
     INT     waisem;             // セマフォ資源要求数
+
+    /* メッセージキュー待ち情報 */
+    const void  *sndmsg;        // 送信待ちメッセージ
+    void        *rcvmsg;        // 受信先バッファ
 } TCB;
 
 extern TCB	tcb_tbl[];          // TCBテーブル
@@ -100,6 +106,17 @@ typedef struct semaphore_control_block {
     INT     semcnt;     // セマフォ値
     INT     maxsem;     // セマフォ最大値
 } SEMCB;
+
+/* 固定長メッセージキュー管理情報(MSGQCB) */
+typedef struct message_queue_control_block {
+    KSSTAT  state;      // メッセージキュー状態
+    UB      *buffer;    // メッセージ格納領域
+    INT     msgsz;      // 1メッセージのサイズ
+    INT     maxmsg;     // 最大メッセージ数
+    INT     count;      // 現在のメッセージ数
+    INT     head;       // 読み出し位置
+    INT     tail;       // 書き込み位置
+} MSGQCB;
 
 /* OSメイン関数 */
 extern int main(void);
