@@ -61,6 +61,7 @@
 #define RESETS_RESET_I2C1       (0x00000010)
 #define RESETS_RESET_IO_BANK0   (1<<5)
 #define RESETS_RESET_PADS_BANK0 (1<<8)
+#define RESETS_RESET_SPI0       (1<<16)
 
 /* GPIO */
 #define IO_BANK0_BASE           0x40014000
@@ -71,6 +72,7 @@
 
 #define	GPIO_CTRL_FUNCSEL_I2C   3
 #define GPIO_CTRL_FUNCSEL_SIO   5
+#define GPIO_CTRL_FUNCSEL_SPI   1
 #define	GPIO_CTRL_FUNCSEL_NULL  31
 
 #define PADS_BANK0_BASE         0x4001c000
@@ -193,6 +195,25 @@
 
 /* IC_ENABLE / IC_ENABLE_STATUS */
 #define I2C_ENABLE_EN              (1U << 0) // I2Cコントローラ有効
+
+/* SPI (ARM PrimeCell SSP) */
+#define SPI0_BASE                  0x4003C000
+
+#define SPIx_CR0                   0x000
+#define SPIx_CR1                   0x004
+#define SPIx_DR                    0x008
+#define SPIx_SR                    0x00C
+#define SPIx_CPSR                  0x010
+#define SPIx_IMSC                  0x014
+#define SPIx_ICR                   0x020
+
+#define SPI_CR0_DSS_8BIT           0x07U
+#define SPI_CR0_SCR(n)             ((UW)(n) << 8)
+#define SPI_CR1_SSE                (1U << 1)
+#define SPI_SR_TFE                 (1U << 0)
+#define SPI_SR_TNF                 (1U << 1)
+#define SPI_SR_RNE                 (1U << 2)
+#define SPI_SR_BSY                 (1U << 4)
 
 /* IOPORT レジスタ */
 #define SIO_BASE                0xD0000000
