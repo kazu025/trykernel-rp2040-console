@@ -13,6 +13,7 @@
 #include "task_mpuirq.h"
 #include "task_msgtest.h"
 #include "task_motionled.h"
+#include "w25qxx.h"
 
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
@@ -36,6 +37,7 @@ static void cmd_mpuirq(int argc, char *argv[]);
 static void cmd_motion(int argc, char *argv[]);
 static void cmd_msgsend(int argc, char *argv[]);
 static void cmd_msgtest(int argc, char *argv[]);
+static void cmd_flashid(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
@@ -69,6 +71,7 @@ static const command_t command_table[] = {
     {"motion", cmd_motion, "start motion measurement after 3-second settling"},
     {"msgsend", cmd_msgsend, "send a test message to another task"},
     {"msgtest", cmd_msgtest, "test message FIFO, full queue and timeout"},
+    {"flashid", cmd_flashid, "show SPI flash JEDEC ID"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
     {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"},
@@ -931,4 +934,40 @@ static void cmd_msgtest(int argc, char *argv[])
     (void)argv;
 
     task_msgtest_run_tests();
+}
+
+static void cmd_flashid(int argc, char *argv[])
+{
+    w25qxx_jedec_id_t jedec_id;
+    UW capacity;
+
+    (void)argc;
+    (void)argv;
+
+    if(w25qxx_read_jedec_id(&jedec_id) == FALSE){
+        uart_tx_send("SPI flash JEDEC ID read error\r\n");
+        return;
+    }
+
+    uart_tx_printf(
+        "SPI flash JEDEC ID: 0x%x 0x%x 0x%x\r\n",
+        (UINT)jedec_id.manufacturer_id,
+        (UINT)jedec_id.memory_type,
+        (UINT)jedec_id.capacity_id
+    );
+    uart_tx_printf(
+        "Manufacturer: %s\r\n",
+        w25qxx_manufacturer_name(jedec_id.manufacturer_id)
+    );
+
+    capacity = w25qxx_capacity_bytes(jedec_id.capacity_id);
+    if(capacity != 0U){
+        uart_tx_printf(
+            "Capacity: %u bytes (%u Mbit)\r\n",
+            (UINT)capacity,
+            (UINT)(capacity / (128U * 1024U))
+        );
+    }else{
+        uart_tx_send("Capacity: unknown\r\n");
+    }
 }

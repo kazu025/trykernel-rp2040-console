@@ -170,3 +170,19 @@ void gpio_init_i2c(unsigned int pin)
     pad &= ~(GPIO_OD | GPIO_PDE);
     out_w(GPIO(pin), pad);
 }
+
+/* GPIOをSPI機能へ接続する */
+void gpio_init_spi(unsigned int pin)
+{
+    UW pad;
+
+    if(!gpio_is_valid(pin)) return;
+
+    gpio_reset_release();
+    out_w(GPIO_CTRL(pin), GPIO_CTRL_FUNCSEL_SPI);
+
+    pad = in_w(GPIO(pin));
+    pad |= GPIO_IE;
+    pad &= ~(GPIO_OD | GPIO_PUE | GPIO_PDE);
+    out_w(GPIO(pin), pad);
+}

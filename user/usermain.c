@@ -9,6 +9,8 @@
 #include "task_mpuirq.h"
 #include "task_msgtest.h"
 #include "task_motionled.h"
+#include "spi.h"
+#include "w25qxx.h"
 
 /*
  * タスク優先度:1〜16
@@ -232,6 +234,8 @@ int usermain(void)
     ER ercd;
     led25_init();   // PicoボードのLED初期化
     i2c0_init();   // I2C初期化
+    spi0_init();   // SPI0初期化
+    w25qxx_init(); // W25QXXのCS初期化
     ercd = i2c0_sync_init();
     if(ercd < E_OK){
         return (int)ercd;

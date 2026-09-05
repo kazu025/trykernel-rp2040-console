@@ -57,6 +57,7 @@ C_SRCS  := \
 	kernel/task_sync.c \
 	drivers/gpio.c \
 	drivers/i2c.c \
+	drivers/spi.c \
 	drivers/uart.c \
 	user/task_led.c	\
 	user/task_lcdtemp.c \
@@ -75,6 +76,7 @@ C_SRCS  := \
 	drivers/gpio.c \
 	drivers/adt7410.c \
 	drivers/mpu6050.c \
+	drivers/w25qxx.c \
 	drivers/grove_lcd.c \
 	drivers/i2c.c \
 	drivers/uart.c

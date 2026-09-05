@@ -86,6 +86,8 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - イベントフラグによるMPU割り込み処理タスクの起床
 - GPIO16外付けLEDによるモーション状態表示
 - メッセージ送受信タスクとUARTテストコマンド
+- SPI0のレジスタレベル・ドライバ
+- W25QXX SPIフラッシュのJEDEC ID読み出し
 
 ## UARTの構成
 
@@ -569,6 +571,67 @@ I2C error count: 0
 I2C recovery count: 0
 ```
 
+## SPIフラッシュメモリ
+
+RP2040のSPI0コントローラをレジスタから直接設定し、W25QXX SPIフラッシュメモリを接続します。現在はSPI Mode 0、8ビット、約1MHzのポーリング方式です。
+
+### SPI0設定と接続
+
+W25QXXモジュールの電源には3.3Vを使用します。
+
+| W25QXXモジュール | Raspberry Pi Pico | 役割 |
+|---|---|---|
+| `VCC` | 3V3 | 電源 |
+| `GND` | GND | グランド |
+| `CS` | GPIO17（物理ピン22） | チップ選択 |
+| `CLK` | GPIO18（物理ピン24） | SPIクロック |
+| `DI` | GPIO19（物理ピン25） | PicoからFlashへのデータ（MOSI） |
+| `DO` | GPIO20（物理ピン26） | FlashからPicoへのデータ（MISO） |
+
+GPIO17のCSはSIOのGPIO出力として制御し、GPIO18～GPIO20をSPI0機能へ割り当てています。
+
+```text
+Pico GP17（CS）  ─ W25QXX CS
+Pico GP18（SCK） ─ W25QXX CLK
+Pico GP19（TX）  ─ W25QXX DI
+Pico GP20（RX）  ─ W25QXX DO
+```
+
+### JEDEC IDの読み出し
+
+`flashid`コマンドは、CSをLowにしてJEDEC ID読み出し命令`0x9F`を送信し、メーカーID、メモリ種別、容量IDの3バイトを読み出します。通信終了後にCSをHighへ戻します。
+
+```text
+CSをLow
+   ↓
+0x9Fを送信
+   ↓
+メーカーIDを受信
+   ↓
+メモリ種別を受信
+   ↓
+容量IDを受信
+   ↓
+CSをHigh
+```
+
+実機では、Winbond製W25Q32相当の32Mbit（4MByte）フラッシュを確認しました。
+
+```text
+> flashid
+SPI flash JEDEC ID: 0xef 0x40 0x16
+Manufacturer: Winbond
+Capacity: 4194304 bytes (32 Mbit)
+```
+
+| ID | 値 | 内容 |
+|---|---|---|
+| メーカーID | `0xEF` | Winbond |
+| メモリ種別 | `0x40` | W25Qシリーズ |
+| 容量ID | `0x16` | 32Mbit（4MByte） |
+
+現段階ではJEDEC IDの読み出しだけを実装しており、フラッシュの書き込みや消去は行いません。
+
 ## タスク間メッセージ通信
 
 固定サイズのデータをタスク間で受け渡す、FIFO方式のメッセージキューを実装しています。
@@ -755,6 +818,7 @@ minicom -D /dev/ttyACM0 -b 115200
 | `motion` | 3秒間静定してから移動計測モードを開始 |
 | `msgsend` | テストメッセージを受信タスクへ送信 |
 | `msgtest` | FIFO順序、キュー満杯、送受信タイムアウトをテスト |
+| `flashid` | W25QXX SPIフラッシュのJEDEC ID、メーカー、容量を表示 |
 | `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
 | `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
 | `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
@@ -791,6 +855,7 @@ commands:
    motion -  start motion measurement after 3-second settling
    msgsend -  send a test message to another task
    msgtest -  test message FIFO, full queue and timeout
+   flashid -  show SPI flash JEDEC ID
    lcdtest -  test Grove RGB LCD V5.0
    lcdtemp -  show ADT7410 temperature on LCD
    lcdcolor -  set LCD backlight: R G B
@@ -888,6 +953,7 @@ ADT7410 temperature: 25.313 C
 - UART受信リングバッファの配列サイズは128バイトです。
 - UART送信キューは32件です。
 - UART送信キューの1メッセージは、終端文字を含めて128バイトです。
+- SPI0は約1MHzのポーリング転送で、現在のW25QXX機能はJEDEC ID読み出しのみです。
 - 送信文字列は最大127文字で切り詰められます。
 - コンソールの改行入力は、現在CRのみを処理します。
 - `mini_printf()`は機能を限定した独自実装です。
