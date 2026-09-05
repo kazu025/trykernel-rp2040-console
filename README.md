@@ -22,6 +22,7 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - READYキューとWAITキュー
 - セマフォによる排他制御
 - イベントフラグによるタスク同期
+- 固定長メッセージキューによるタスク間通信
 - UART受信割り込み
 - 割り込み処理からタスク処理への受け渡し
 - PendSVによる遅延ディスパッチ
@@ -50,6 +51,9 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - タスク優先度1～16
 - 最大8セマフォ
 - 最大8イベントフラグ
+- 最大4メッセージキュー
+- FIFO方式の固定長メッセージ送受信
+- メッセージ送受信のポーリング・無期限待ち・タイムアウト
 
 ### 追加した周辺機能
 
@@ -80,6 +84,7 @@ Pico SDKは使用せず、RP2040のレジスタを直接操作しています。
 - バイナリセマフォによるI2C0のタスク間排他制御
 - GPIO6によるMPU Data Ready割り込み
 - イベントフラグによるMPU割り込み処理タスクの起床
+- メッセージ送受信タスクとUARTテストコマンド
 
 ## UARTの構成
 
@@ -526,6 +531,72 @@ I2C error count: 0
 I2C recovery count: 0
 ```
 
+## タスク間メッセージ通信
+
+固定サイズのデータをタスク間で受け渡す、FIFO方式のメッセージキューを実装しています。
+
+```c
+typedef struct {
+    UW  sequence;
+    INT value;
+} MSGTEST_MESSAGE;
+```
+
+キュー作成時に1件のサイズ、最大件数、格納用バッファを指定します。
+
+```c
+cmsgq.msgqatr = TA_TFIFO;
+cmsgq.msgsz = sizeof(MSGTEST_MESSAGE);
+cmsgq.maxmsg = 4;
+cmsgq.bufptr = msgtest_buffer;
+
+msgqid = tk_cre_msgq(&cmsgq);
+```
+
+送信側は`tk_snd_msgq()`、受信側は`tk_rcv_msgq()`を使用します。メッセージキューは構造体の型を解釈せず、`msgsz`で指定された固定バイト数をキュー内部のバッファへコピーします。
+
+```c
+tk_snd_msgq(msgqid, &message, TMO_POL);
+tk_rcv_msgq(msgqid, &message, TMO_FEVR);
+```
+
+キューに空きがない場合、送信タスクはWAIT状態になります。キューが空の場合、受信タスクがWAIT状態になります。別タスクの送受信によって条件が成立すると、待っていたタスクはREADYキューへ戻ります。`TMO_POL`では待たずに`E_TMOUT`を返し、有限時間または`TMO_FEVR`を指定することもできます。
+
+```text
+送信タスク
+   ↓ tk_snd_msgq()
+固定長FIFOキュー
+   ↓ tk_rcv_msgq()
+受信タスク
+
+キュー満杯 → 送信タスクがWAIT
+キューが空 → 受信タスクがWAIT
+```
+
+`msgsend`は、シーケンス番号と値を含む構造体を受信タスクへ送信します。
+
+```text
+> msgsend
+Message sent: sequence=1
+> Message received: sequence=1 value=10
+```
+
+`msgtest`は専用の深さ4のキューを使用し、複数メッセージのFIFO順序、キュー満杯、受信タイムアウト、送信タイムアウトを確認します。
+
+```text
+> msgtest
+Message queue test start
+Queue full test: PASS (E_TMOUT)
+FIFO receive: sequence=1 value=10
+FIFO receive: sequence=2 value=20
+FIFO receive: sequence=3 value=30
+FIFO receive: sequence=4 value=40
+FIFO order test: PASS
+Receive timeout test: PASS (100ms, E_TMOUT)
+Send timeout test: PASS (100ms, E_TMOUT)
+Message queue test complete: 4/4 PASS
+```
+
 ## 必要な環境
 
 Linux MintまたはUbuntu系Linuxを想定しています。
@@ -644,6 +715,8 @@ minicom -D /dev/ttyACM0 -b 115200
 | `mpucal` | 静止状態からジャイロのゼロ点を補正 |
 | `mpuirq` | MPU GPIO割り込みとI2C復旧の診断情報を表示 |
 | `motion` | 3秒間静定してから移動計測モードを開始 |
+| `msgsend` | テストメッセージを受信タスクへ送信 |
+| `msgtest` | FIFO順序、キュー満杯、送受信タイムアウトをテスト |
 | `lcdtest` | Grove RGB LCDへテスト文字列を表示 |
 | `lcdtemp` | ADT7410の温度をLCDへ1回表示 |
 | `lcdcolor R G B` | RGBバックライトを0～255の値で設定 |
@@ -678,6 +751,8 @@ commands:
    mpucal -  calibrate MPU gyro while stationary
    mpuirq -  show MPU GPIO IRQ and I2C diagnostics
    motion -  start motion measurement after 3-second settling
+   msgsend -  send a test message to another task
+   msgtest -  test message FIFO, full queue and timeout
    lcdtest -  test Grove RGB LCD V5.0
    lcdtemp -  show ADT7410 temperature on LCD
    lcdcolor -  set LCD backlight: R G B
@@ -728,6 +803,7 @@ ADT7410 temperature: 25.313 C
 |---|---:|---|
 | UART RX | 4 | イベント待ち、リングバッファ読み出し、コンソール入力 |
 | UART TX | 6 | 送信キューの取り出しとUART出力 |
+| Message receiver | 7 | 固定長メッセージキューの受信待ちと内容表示 |
 | UART Log A | 8 | 送信競合テスト用ログ |
 | MPU IRQ | 9 | Data Readyイベント待ち、MPUセンサーデータ取得 |
 | UART Log B | 10 | 送信競合テスト用ログ |

@@ -7,6 +7,7 @@
 #include "i2c.h"
 #include "grove_lcd.h"
 #include "task_mpuirq.h"
+#include "task_msgtest.h"
 
 /*
  * タスク優先度:1〜16
@@ -19,6 +20,7 @@
 #define PRIORITY_LOG_B      10
 #define PRIORITY_LCDTEMP    11
 #define PRIORITY_MPUIRQ      9
+#define PRIORITY_MSGTEST     7
 /*
  * stack size
  */
@@ -29,6 +31,7 @@
 #define STACK_LOG_B     1024
 #define STACK_LCDTEMP   1024
 #define STACK_MPUIRQ    1024
+#define STACK_MSGTEST   1024
 /*
  * tk_set_flg() scheduler呼び出し確認用
  */
@@ -200,6 +203,16 @@ T_CTSK ctsk_mpuirq = {
     .bufptr     = tskstk_mpuirq,
 };
 
+UW tskstk_msgtest[STACK_MSGTEST/sizeof(UW)];
+ID tskid_msgtest;
+T_CTSK ctsk_msgtest = {
+    .tskatr     = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task       = task_msgtest,
+    .itskpri    = PRIORITY_MSGTEST,
+    .stksz      = STACK_MSGTEST,
+    .bufptr     = tskstk_msgtest,
+};
+
 
 int usermain(void)
 {
@@ -235,6 +248,10 @@ int usermain(void)
         return (int)ercd;
     }
     ercd = task_mpuirq_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
+    ercd = task_msgtest_init();
     if(ercd < E_OK){
         return (int)ercd;
     }
@@ -288,6 +305,12 @@ int usermain(void)
         return (int)tskid_mpuirq;
     }
     tk_sta_tsk(tskid_mpuirq, 0);
+
+    tskid_msgtest = tk_cre_tsk(&ctsk_msgtest);
+    if(tskid_msgtest < E_OK){
+        return (int)tskid_msgtest;
+    }
+    tk_sta_tsk(tskid_msgtest, 0);
 
 #if ENABLE_FLGTEST
     tskid_flgtest_a = tk_cre_tsk(&ctsk_flgtest_a);

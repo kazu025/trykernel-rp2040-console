@@ -11,6 +11,7 @@
 #include "grove_lcd.h"
 #include "task_lcdtemp.h"
 #include "task_mpuirq.h"
+#include "task_msgtest.h"
 
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
@@ -32,6 +33,8 @@ static void cmd_mpu(int argc, char *argv[]);
 static void cmd_mpucal(int argc, char *argv[]);
 static void cmd_mpuirq(int argc, char *argv[]);
 static void cmd_motion(int argc, char *argv[]);
+static void cmd_msgsend(int argc, char *argv[]);
+static void cmd_msgtest(int argc, char *argv[]);
 static void cmd_lcdtest(int argc, char *argv[]);
 static void cmd_lcdtemp(int argc, char *argv[]);
 static void cmd_lcdcolor(int argc, char *argv[]);
@@ -63,6 +66,8 @@ static const command_t command_table[] = {
     {"mpucal", cmd_mpucal, "calibrate MPU gyro while stationary"},
     {"mpuirq", cmd_mpuirq, "show MPU data ready IRQ status"},
     {"motion", cmd_motion, "start motion measurement after 3-second settling"},
+    {"msgsend", cmd_msgsend, "send a test message to another task"},
+    {"msgtest", cmd_msgtest, "test message FIFO, full queue and timeout"},
     {"lcdtest", cmd_lcdtest, "test Grove RGB LCD V5.0"},
     {"lcdtemp", cmd_lcdtemp, "show ADT7410 temperature on LCD"},
     {"lcdcolor", cmd_lcdcolor, "set LCD backlight: R G B"},
@@ -899,4 +904,28 @@ static void cmd_lcdmode(int argc, char *argv[])
 
     task_lcdtemp_set_mode(mode);
     uart_tx_printf("LCD mode: %s\r\n", lcd_mode_name(mode));
+}
+
+static void cmd_msgsend(int argc, char *argv[])
+{
+    UW sequence;
+    ER err;
+
+    (void)argc;
+    (void)argv;
+
+    err = task_msgtest_send(&sequence);
+    if(err == E_OK) {
+        uart_tx_printf("Message sent: sequence=%u\r\n", (UINT)sequence);
+    } else {
+        uart_tx_printf("Message send error: %d\r\n", err);
+    }
+}
+
+static void cmd_msgtest(int argc, char *argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    task_msgtest_run_tests();
 }
