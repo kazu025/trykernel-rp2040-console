@@ -8,6 +8,7 @@
 #include "grove_lcd.h"
 #include "task_mpuirq.h"
 #include "task_msgtest.h"
+#include "task_motionled.h"
 
 /*
  * タスク優先度:1〜16
@@ -21,6 +22,7 @@
 #define PRIORITY_LCDTEMP    11
 #define PRIORITY_MPUIRQ      9
 #define PRIORITY_MSGTEST     7
+#define PRIORITY_MOTIONLED   13
 /*
  * stack size
  */
@@ -32,6 +34,7 @@
 #define STACK_LCDTEMP   1024
 #define STACK_MPUIRQ    1024
 #define STACK_MSGTEST   1024
+#define STACK_MOTIONLED 1024
 /*
  * tk_set_flg() scheduler呼び出し確認用
  */
@@ -213,6 +216,16 @@ T_CTSK ctsk_msgtest = {
     .bufptr     = tskstk_msgtest,
 };
 
+UW tskstk_motionled[STACK_MOTIONLED/sizeof(UW)];
+ID tskid_motionled;
+T_CTSK ctsk_motionled = {
+    .tskatr     = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task       = task_motionled,
+    .itskpri    = PRIORITY_MOTIONLED,
+    .stksz      = STACK_MOTIONLED,
+    .bufptr     = tskstk_motionled,
+};
+
 
 int usermain(void)
 {
@@ -252,6 +265,10 @@ int usermain(void)
         return (int)ercd;
     }
     ercd = task_msgtest_init();
+    if(ercd < E_OK){
+        return (int)ercd;
+    }
+    ercd = task_motionled_init();
     if(ercd < E_OK){
         return (int)ercd;
     }
@@ -311,6 +328,12 @@ int usermain(void)
         return (int)tskid_msgtest;
     }
     tk_sta_tsk(tskid_msgtest, 0);
+
+    tskid_motionled = tk_cre_tsk(&ctsk_motionled);
+    if(tskid_motionled < E_OK){
+        return (int)tskid_motionled;
+    }
+    tk_sta_tsk(tskid_motionled, 0);
 
 #if ENABLE_FLGTEST
     tskid_flgtest_a = tk_cre_tsk(&ctsk_flgtest_a);

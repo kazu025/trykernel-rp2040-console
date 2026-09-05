@@ -12,6 +12,7 @@
 #include "task_lcdtemp.h"
 #include "task_mpuirq.h"
 #include "task_msgtest.h"
+#include "task_motionled.h"
 
 /* --- コマンドバッファ最大数 --- */
 #define CMD_MAX_ARGS    16
@@ -720,6 +721,7 @@ static void cmd_motion(int argc, char *argv[])
     (void)argv;
 
     task_mpuirq_motion_stop();
+    task_motionled_set_settling();
     uart_tx_send(
         "Motion settling mode started. Keep the MPU sensor still for 3 seconds...\r\n");
 
@@ -730,6 +732,7 @@ static void cmd_motion(int argc, char *argv[])
             &offset_y,
             &offset_z,
             &accel_reference_squared) == FALSE){
+        task_motionled_set_off();
         uart_tx_send("Motion settling error\r\n");
         return;
     }

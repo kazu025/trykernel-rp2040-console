@@ -2,6 +2,7 @@
 #include "gpio.h"
 #include "mpu6050.h"
 #include "task_mpuirq.h"
+#include "task_motionled.h"
 #include "uart_tx.h"
 
 #define MPU_INT_PIN          6U
@@ -68,6 +69,7 @@ static void motion_update(const mpu6050_raw_data_t *raw_data)
         if((motion_detected == FALSE)
                 && (motion_active_count >= MOTION_ACTIVE_SAMPLE_COUNT)){
             motion_detected = TRUE;
+            task_motionled_set_moving();
             uart_tx_send("Motion: MOVING\r\n");
         }
     }else{
@@ -78,6 +80,7 @@ static void motion_update(const mpu6050_raw_data_t *raw_data)
         if((motion_detected != FALSE)
                 && (motion_still_count >= MOTION_STILL_SAMPLE_COUNT)){
             motion_detected = FALSE;
+            task_motionled_set_still();
             uart_tx_send("Motion: STOPPED\r\n");
         }
     }
@@ -118,11 +121,13 @@ void task_mpuirq_motion_start(long long accel_magnitude_squared)
     motion_active_count = 0U;
     motion_still_count = 0U;
     motion_enabled = TRUE;
+    task_motionled_set_still();
 }
 
 void task_mpuirq_motion_stop(void)
 {
     motion_enabled = FALSE;
+    task_motionled_set_off();
 }
 
 BOOL task_mpuirq_motion_is_enabled(void)
