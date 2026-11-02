@@ -1,0 +1,116 @@
+
+Start Try Kernel
+
+uart tx task start
+Hello Try Kernel
+Motion flash log initialization error
+
+uart rx task start
+> Message receiver task start
+response: sampling 100 wakes, wait=50 ms, priority=7
+MPU data ready IRQ initialization error
+INA226 periodic measurement task start (1s)
+LED task start!!
+Motion LED task start (GPIO16)
+response: samples=100 min=5 us max=85 us avg=6 us
+response[0]=12 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[1]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[2]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[3]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[4]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[5]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[6]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[7]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[8]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[9]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[10]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[11]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[12]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[13]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[14]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[15]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[16]=7 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[17]=8 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[18]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[19]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[20]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[21]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[22]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[23]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[24]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[25]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[26]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[27]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[28]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[29]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[30]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[31]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[32]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[33]=13 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[34]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[35]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[36]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[37]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[38]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[39]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[40]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[41]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[42]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[43]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[44]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[45]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[46]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[47]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[48]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[49]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[50]=9 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[51]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[52]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[53]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[54]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[55]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[56]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[57]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[58]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[59]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[60]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[61]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[62]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[63]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[64]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[65]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[66]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[67]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[68]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[69]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[70]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[71]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[72]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[73]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[74]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[75]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[76]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[77]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[78]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[79]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[80]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[81]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[82]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[83]=85 us flash_runs=1 inside=1 start=6 us scan=63 us
+response[84]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[85]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[86]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[87]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[88]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[89]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[90]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[91]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[92]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[93]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[94]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[95]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[96]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[97]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[98]=5 us flash_runs=0 inside=0 start=0 us scan=0 us
+response[99]=6 us flash_runs=0 inside=0 start=0 us scan=0 us
+ 

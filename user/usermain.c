@@ -195,6 +195,7 @@ T_CTSK  ctsk_uartlog_b = {
 };
 
 /* LCD温度表示タスク生成情報 */
+/*
 UW  tskstk_lcdtemp[STACK_LCDTEMP/sizeof(UW)];
 ID  tskid_lcdtemp;
 T_CTSK  ctsk_lcdtemp = {
@@ -204,7 +205,7 @@ T_CTSK  ctsk_lcdtemp = {
     .stksz      = STACK_LCDTEMP,
     .bufptr     = tskstk_lcdtemp,
 };
-
+*/
 UW tskstk_mpuirq[STACK_MPUIRQ/sizeof(UW)];
 ID tskid_mpuirq;
 T_CTSK ctsk_mpuirq = {
@@ -255,6 +256,17 @@ T_CTSK ctsk_inapower = {
     .bufptr     = tskstk_inapower,
 };
 
+
+/* 計測専用タスク。既存タスクを残した条件で、起動ごとに1回測る。 */
+static UW stack_latency[1024 / sizeof(UW)];
+extern void task_latency(INT stacd, void *exinf);
+static T_CTSK ctsk_latency = {
+    .tskatr = TA_HLNG | TA_RNG3 | TA_USERBUF,
+    .task = task_latency,
+    .itskpri = 7,
+    .stksz = sizeof(stack_latency),
+    .bufptr = stack_latency,
+};
 
 int usermain(void)
 {
@@ -367,12 +379,13 @@ int usermain(void)
     tk_sta_tsk(tskid_uartlog_b, 0);
 
     /* LCD温度表示タスク */
+    /*
     tskid_lcdtemp = tk_cre_tsk(&ctsk_lcdtemp);
     if(tskid_lcdtemp < E_OK){
         return (int)tskid_lcdtemp;
     }
     tk_sta_tsk(tskid_lcdtemp, 0);
-
+*/
     tskid_mpuirq = tk_cre_tsk(&ctsk_mpuirq);
     if(tskid_mpuirq < E_OK){
         return (int)tskid_mpuirq;
@@ -407,5 +420,10 @@ int usermain(void)
     tk_dly_tsk(200);
     tk_set_flg(flgtest_id, 1U); // イベントフラグをセットする
 #endif // ENABLE_FLGTEST
+    /* 全通常タスクを起動してから計測を開始する。 */
+    ID latency_id = tk_cre_tsk(&ctsk_latency);
+    if(latency_id < E_OK) return (int)latency_id;
+    ercd = tk_sta_tsk(latency_id, 0);
+    if(ercd < E_OK) return (int)ercd;
     return 0;
 }

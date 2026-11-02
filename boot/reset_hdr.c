@@ -141,6 +141,11 @@ static void init_peri(void)
     clr_w(RESETS_RESET, (1<<22));
     while((in_w(RESETS_RESET_DONE) & (1<<22))==0);
 
+    /* 12 MHzのXOSCを12分周し、TIMERを1 us単位で動かす。 */
+    clr_w(RESETS_RESET, RESETS_RESET_TIMER);
+    while((in_w(RESETS_RESET_DONE) & RESETS_RESET_TIMER)==0);
+    out_w(WATCHDOG_TICK, WATCHDOG_TICK_ENABLE | XOSC_MHz);
+
     /* 端子設定 */
     out_w(GPIO_OE_CLR, (1<<25));    /* P25端子出力無効 */
     out_w(GPIO_OUT_CLR, (1<<25));   /* P25端子出力クリア */

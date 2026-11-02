@@ -165,7 +165,9 @@ void task_mpuirq(INT stacd, void *exinf)
             || gpio_irq_init_rising(
                 MPU_INT_PIN, mpu_data_ready_notify_from_isr) == FALSE){
         uart_tx_send("MPU data ready IRQ initialization error\r\n");
-        return;
+        /* A task entry has no C caller to return to. */
+        tk_ext_tsk();
+        for(;;) { }
     }
 
     uart_tx_send("MPU data ready IRQ task start (GPIO6, 10Hz)\r\n");

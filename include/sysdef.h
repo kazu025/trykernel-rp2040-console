@@ -226,6 +226,12 @@
 #define GPIO_OE_CLR             (SIO_BASE+0x28)
 #define GPIO_OE_XOR             (SIO_BASE+0x2C)
 
+/* 応答時間計測用: 1 usハードウェアタイマー */
+#define TIMER_TIMERAWL       (0x40054028U)
+#define WATCHDOG_TICK        (0x4005802CU)
+#define WATCHDOG_TICK_ENABLE (1U << 9)
+#define RESETS_RESET_TIMER   (1U << 21)
+
 /* SysTick レジスタ */
 #define SYST_CSR                (0xE000E010)
 #define SYST_RVR                (0xE000E014)

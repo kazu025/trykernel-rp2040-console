@@ -70,6 +70,7 @@ C_SRCS  := \
 	user/task_flashlog.c \
 	user/task_inapower.c \
 	user/task_uartrx.c \
+	user/task_latency.c \
 	user/usermain.c \
 	user/command.c \
 	user/task_uartlog.c \

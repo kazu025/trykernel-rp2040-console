@@ -1,4 +1,6 @@
 #include <trykernel.h>
+#include <knldef.h>
+#include <response_probe.h>
 #include "task_flashlog.h"
 #include "uart_tx.h"
 #include "w25qxx.h"
@@ -231,6 +233,21 @@ void task_flashlog_dump(void)
     );
 }
 
+/* 再試行の実行区間をRAMへ記録。計測中にUARTへ出力しない。 */
+static BOOL flashlog_scan_traced(void)
+{
+    UW start = in_w(TIMER_TIMERAWL);
+    BOOL result = flashlog_scan();
+    UW end = in_w(TIMER_TIMERAWL);
+    UINT intsts;
+    DI(intsts);
+    response_flash_start_us = start;
+    response_flash_end_us = end;
+    response_flash_sequence++;
+    EI(intsts);
+    return result;
+}
+
 void task_flashlog(INT stacd, void *exinf)
 {
     FLASHLOG_MESSAGE message;
@@ -242,10 +259,10 @@ void task_flashlog(INT stacd, void *exinf)
     (void)stacd;
     (void)exinf;
 
-    if(flashlog_scan() == FALSE){
+    if(flashlog_scan_traced() == FALSE){
         uart_tx_send("Motion flash log initialization error\r\n");
         /* 履歴領域が消去されたら自動的に初期化をやり直す */
-        while(flashlog_scan() == FALSE){
+        while(flashlog_scan_traced() == FALSE){
             (void)tk_dly_tsk(1000);
         }
     }

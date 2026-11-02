@@ -1,10 +1,19 @@
-﻿/*
+/*
  *** Try Kernel
  *      システムタイマ
 */
 
 #include <trykernel.h>
 #include <knldef.h>
+#include <response_probe.h>
+
+TCB *response_probe_task;
+volatile UW response_probe_ready_us;
+volatile BOOL response_probe_valid;
+volatile UW response_flash_sequence;
+volatile UW response_flash_start_us;
+volatile UW response_flash_end_us;
+volatile UW response_ready_flash_sequence;
 
 TCB *wait_queue;    /* 時間待ち状態のタスクの待ち行列(ウェイトキュー) */
 
@@ -35,6 +44,14 @@ void systimer_handler(void)
             tcb->state      = TS_READY;
             tcb->waifct     = TWFCT_NON;
             tqueue_add_entry( &ready_queue[PRI_INDEX(tcb->itskpri)], tcb); // タスクをレディキューにつなぐ
+#ifdef TIMER_TIMERAWL
+            /* A: 対象タスクのREADY登録直後。ホストテストでは実機MMIOを読まない。 */
+            if(tcb == response_probe_task) {
+                response_ready_flash_sequence = response_flash_sequence;
+                response_probe_ready_us = in_w(TIMER_TIMERAWL);
+                response_probe_valid = TRUE;
+            }
+#endif
         }
     }
     cyclic_tick();
