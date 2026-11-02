@@ -33,6 +33,10 @@ ID tk_cre_cyc(const T_CCYC *pk_ccyc)
 }
 
 /* All accesses, including state inspection, are protected from SysTick. */
+/*
+ * 0:開始 / 1:停止 / 2:削除 / 3:状態参照
+ *
+ */
 static ER control(ID id, INT operation, T_RCYC *status)
 {
     UINT intsts;
@@ -54,6 +58,7 @@ static ER control(ID id, INT operation, T_RCYC *status)
     case 1: cb->active = FALSE; break;
     case 2: cb->active = FALSE; cb->exists = FALSE; break;
     case 3:
+        // TCYC_STP: 停止中 / TCYC_STA: 実行中
         status->cycstat = cb->active ? TCYC_STA : TCYC_STP;
         status->lfttim = cb->active ? cb->remaining : 0;
         break;
